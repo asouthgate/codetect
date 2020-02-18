@@ -36,81 +36,21 @@ class ReadAln():
     def c2i(self,c):
         return {"A":0, "C":1, "G":2, "T":3}[c]
 
-    def del_inds(self,inds):
+    def del_inds(self, delinds, new_index_map):
         """ Remove all bases mapping to positions in inds, and shift indices accordingly
-
-        Args:
-            inds: sorted positions to delete. """
-#        print(self.get_aln())
-        print("***DELETING***:")
-        print("\t delinds ", inds)
-        print("\t start   ", self.get_aln())
-        print("\t startpos", self.pos)
-        print("\t startbpp", self.base_pos_pairs)
-
-        dmini = inds[0]
-        dmaxi = inds[-1]
-        rmini = self.pos
-        rmaxi = self.base_pos_pairs[-1][0] + self.pos
-        if dmini > rmaxi:
-            # the deletion indices are after the last base, do nothing
-            print("\t all indices beyond last base, do nothing")
-            return True
-        if dmaxi < rmini:
-            # all deletion indices are before the first base; do nothing
-            print("\t all indices before first base, shift pos")
-            self.pos -= len(inds)
-            return True
-
-        print("\t dels before and after")
-        # first delete any we wish to remove
-        dels_in_read = [j for j in inds if rmini <= j <= rmaxi]
-
-        if len(dels_in_read) == 0:
-            print("\t dels before and after only, shift pos")
-            self.pos -= len(dels_in_read)
-            return True
-
-        print("\t remove offending positions")
-        dels_in_read_set = set(dels_in_read)   
-        self.base_pos_pairs = [pb for pb in self.base_pos_pairs if pb[0]+self.pos not in dels_in_read_set]
-        print("\t newaln:", self.get_aln())
-        print("\t newpos:", self.pos)
-        print("\t newbpp:", self.base_pos_pairs)
-
-        print("\t build shift array")
-        currdel = dels_in_read.pop(0)
-        shift_arr = [0 for i in range(len(self.base_pos_pairs))]
-        for ri, pb in enumerate(self.base_pos_pairs):
-            p = pb[0]
-            shift_arr[ri] = shift_arr[ri-1]
-            if currdel < p+self.pos:
-                shift_arr[ri] += 1
-                if len(dels_in_read) == 0:
-                    for rj in range(ri,len(shift_arr)):
-                        shift_arr[rj] = shift_arr[ri]
-                    break
-                else:
-                    currdel = dels_in_read.pop(0)
-#                    print(currdel)
-
-        print("\t shiftarr:", shift_arr)
-        for ai in range(len(self.base_pos_pairs)):
-            pb = self.base_pos_pairs[ai]
-            shift = shift_arr[ai]
-            self.base_pos_pairs[ai][0] -= shift
-        print("\t shiftbpp:", self.base_pos_pairs)
-
-        # shift for any before the start
-        self.pos -= len([j for j in inds if j < self.pos])
-        if self.base_pos_pairs[0][0] > 0:
-            minus = self.base_pos_pairs[0][0]
-            self.pos += minus
-            for i in range(len(self.base_pos_pairs)):
-                self.base_pos_pairs[i][0] -= minus
-
-
             
+        Args:
+            inds: indices of deleted bases
+            shiftmap: mapping old positions to new ones
+        """
+        # Delete specified positions
+        self.base_pos_pairs = [bpp for bpp in self.base_pos_pairs if bpp[0]+self.pos not in delinds]        
+        # Remap other positions
+        self.base_pos_pairs = [[new_index_map[bpp[0]+self.pos]-self.pos,bpp[1]] for bpp in self.base_pos_pairs]
+        # Shift the position back to zero-first base mapping
+        mini = self.base_pos_pairs[0][0] 
+        self.pos += mini
+        self.base_pos_pairs = [[bpp[0]-mini,bpp[1]] for bpp in self.base_pos_pairs]       
 
     def append_mapped_base(self, pos, c):
         """ Add a base c at pos to the end of the alignment.
@@ -153,9 +93,18 @@ class ReadAln():
 
 if __name__ == "__main__":
     import random
+    def gen_index_remap(L,delinds):
+        shift = [0 for i in range(L)]
+        for si in range(len(shift)):
+            shift[si] = shift[si-1]
+            if si-1 in delinds:
+                shift[si] += 1
+        return {si:si-s for si,s in enumerate(shift)}
+
     def test_index_deletions():
         """ TODO: Test if index deletion code is working """
-        seq = np.array([random.choice("ACGT") for i in range(21)])
+        L = 21
+        seq = np.array([random.choice("ACGT") for i in range(L)])
         for nread in range(10):
             baseinds = sorted(list(set([random.randint(0,20) for i in range(10)])))
             print("".join(seq))
@@ -164,10 +113,11 @@ if __name__ == "__main__":
                 a.append_mapped_base(bi,a.c2i(seq[bi]))
             print(" "*a.pos + str(a))
             delinds = sorted(list(set([random.randint(0,20) for i in range(5)])))
+            shiftmap = gen_index_remap(L,delinds)
             print("PLEASE DELETE",  delinds)
             nodelinds = [i for i in range(len(seq)) if i not in delinds]
             seq2 = seq[nodelinds]
-            a.del_inds(delinds)
+            a.del_inds(delinds,shiftmap)
             print("".join(seq2))
             print(" "*a.pos + str(a))
             print()
