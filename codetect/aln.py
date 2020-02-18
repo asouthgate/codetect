@@ -9,7 +9,12 @@ class ReadAln():
     def __init__(self,name):
         self.name = name
         self.base_pos_pairs = []
+        self.string = ""
         self.nm = False
+
+    def __repr__(self):
+        return self.string
+
     def append_mapped_base(self, pos, c):
         """ Add a base c at pos to the end of the alignment.
 
@@ -19,6 +24,10 @@ class ReadAln():
         """
         assert c in [0,1,2,3]
         self.base_pos_pairs.append((pos,c))
+        last_pos = self.base_pos_pairs[-1][0]
+        nins = pos-last_pos
+        self.string += "-"*nins + c
+
     def calc_nm(self, consensus):
         """ Calculate the number of mismatches to the reference. """
         self.nm = len([pos for pos,c in self.base_pos_pairs if consensus[pos] != c])
