@@ -9,62 +9,45 @@ import sys
 import random
 np.set_printoptions(threshold=sys.maxsize)
 
-c2i = {"A":0, "C":1, "G":2, "T":3}
+c2i = {c:i for i,c in enumerate("ACGT")}
 
 class EM():
-    def __init__(self, X, C, M, V_INDEX, CONSENSUS, NM_CACHE):
+    def __init__(self, X, M, V_INDEX, CONSENSUS):
         self.X = X
-        self.C = C
+        self.N_READS = sum([Xi.count for Xi in self.X])
         self.M = M
         self.V_INDEX = V_INDEX
         self.CONSENSUS = CONSENSUS
-        self.NM_CACHE = NM_CACHE
-        self.MIN_THRESHOLD = 0.00001
+        self.MIN_THRESHOLD = 0.001
 
-    def PXi_condZi(self,xi,zi,g,v):
-        logp = np.float64(0)
-        pos,read = xi
-        if zi == 0:
-            for ki, c in enumerate(read):
-                if c == self.CONSENSUS[ki+pos]:
-                    logp += np.log((1-g))
-                else:
-                    logp += np.log(g)
-        elif zi == 1:
-            for ki, c in enumerate(read):
-                bind = c2i[c]
-
-#                assert v[pos+ki,bind] != 0.0
-                logp += np.log(v[pos+ki,bind])
-        return np.exp(logp)
-
-    def calTi_pair(self,xi,pi,g,v):
-        a = self.PXi_condZi(xi,0,g,v)
-#        print(a,pi,g)
-        b = self.PXi_condZi(xi,1,g,v)
+    def calTi_pair(self,Xi,pi,g,v):
+        a = Xi.Pmajor(g)
+        b = Xi.Pminor(v)
+        assert 0 <= a <= 1
+        assert 0 <= b <= 1
         c = pi*a + (1-pi)*b
         t1i = (pi * a) / c
         t2i = ((1-pi) * b) / c
-        return np.array([t1i,t2i])
-
+#        print(str(Xi)[:50],Xi.z,Xi.nm)
+#        print(a,b,c)
+#        print(pi*a/c, (1-pi)*b/c)
+#        print()
+#        print(a,b,c)
+        tp = np.array([t1i,t2i])
+        assert sum(tp) > 0.999
+        return tp
+ 
     def recalc_T(self,pi,g,v):
         res = []
-        for i in range(len(self.X)):
-            pair = self.calTi_pair(self.X[i],pi,g,v)
+        for Xi in self.X:
+            pair = self.calTi_pair(Xi,pi,g,v)
             res.append(pair)
         return np.array(res)
 
     def recalc_gamma(self,T):
-        # sum over reads, calculate the number of mismatches
-#        numos = [T[i,0]*self.NM_CACHE[i]*self.C[i] for i,Xi in enumerate(self.X)]
-#        denos = [T[i,0]*len(Xi[1])*self.C[i] for i,Xi in enumerate(self.X)]
-#        lens = [len(Xi[1]) for i,Xi in enumerate(self.X)]
-#        newgt = sum(numos)/sum(denos)
-#        print(T)
-#        print(self.NM_CACHE)
-#        print(self.C)
-        newgt = sum([(T[i,0]*self.NM_CACHE[i]*self.C[i])/len(Xi[1]) for i,Xi in enumerate(self.X)])/sum(self.C)
-        assert len(self.NM_CACHE) == len(self.C) == len(T)
+        numo = sum([T[i,0]*Xi.nm/len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
+        deno = sum([T[i,0] for i,Xi in enumerate(self.X)])
+        newgt = numo/deno
         assert 0 <= newgt <= 1,newgt
         return newgt
 
@@ -78,8 +61,8 @@ class EM():
                 sumo = 0
                 # Iterate over reads that mismatch at position k
                 # THIS IS THE PROBABILITY THAT THEY ARE NOT THE SAME
-                for ri in self.V_INDEX[k,c]:
-                    sumo += (T[ri,1] * self.C[ri])
+                for ri in self.V_INDEX[k][c]:
+                    sumo += (T[ri,1])
                 assert sum(T[:,1]) > 0
                 assert np.isfinite(sumo), sumo
                 newv[k,c] = sumo
@@ -90,28 +73,34 @@ class EM():
         return newv
 
     def recalc_pi(self,T):
-        return sum([T[i,0]*self.C[i] for i in range(len(T))])/sum(self.C)
+        return sum([T[i,0]*self.X[i].count for i in range(len(T))])/self.N_READS
 
     def expected_d(self,v):
         sumo = 0
+        assert len(self.CONSENSUS) == len(v)
         for ci, c in enumerate(self.CONSENSUS):
             alts = [v[ci,j] for j in range(4) if j != c2i[c]]
             sumo += sum(alts)
         return sumo
- 
-    def do(self,testZ,truepi,trueham,truepid):
-        for i in range(len(self.X)):
-            print(testZ[i], self.X[i], self.C[i], self.NM_CACHE[i])
+
+    def do(self, N_ITS):
+        assert len(self.X) > 0
 
         vt = self.M
+#        vt = np.ones(self.M.shape)
+#        vt *= 0.25
         pit = 0.99
         gt = 0.01
 
-        for xi, tup in enumerate(self.X):
-            pos,read = tup
-            for k,c in enumerate(read):
-                assert xi in self.V_INDEX[k+pos][c2i[c]],(xi,tup)
-                assert self.M[pos+k,c2i[c]] > 0, (self.M[pos+k], pos, k,c)
+        print(type(vt))
+
+        for i, Xi in enumerate(self.X):
+            for pos,bk in Xi.get_aln():
+                assert Xi.i2c(bk) != "-"
+                assert i in self.V_INDEX[pos][bk]
+                assert self.M[pos,bk] > 0
+
+        assert len(self.CONSENSUS) == len(vt)
 
         for m in self.M:
             if sum([np.isnan(q) for q in m]) == 0:
@@ -120,24 +109,44 @@ class EM():
         assert len(self.V_INDEX) == len(self.M)
         assert 0 <= gt <= 1,gt
 
-        for t in range(100):
-            print()
-            print("******ITERATION %d" %t)
-            print("TRUEPI", truepi)
-            print("TRUEHAM", trueham, truepid)
-            print("ESTPI",pit)
-            print("ESTGT",gt)
-            print("ESTED", self.expected_d(vt))
-            Tt = self.recalc_T(pit,gt,vt)
-#            for i in range(len(self.X)):
-#                print(testZ[i], self.X[i], self.C[i], self.NM_CACHE[i], Tt[i])
+#        print(self.M)
+#        print(self.V_INDEX[:10])
 
-            assert sum(Tt[:,1]) > 0
-            assert sum(Tt[:,0]) > 0
+        def ham(s1, s2):
+            return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
+ 
+#        for Xi in self.X:
+#            print("-"*Xi.pos + Xi.get_string(), ham(Xi.get_string(), self.CONSENSUS), Xi.nm)
+
+        for t in range(N_ITS):
+            Tt = self.recalc_T(pit,gt,vt)
+#            print(Tt)
             pit = self.recalc_pi(Tt)
             gt = self.recalc_gamma(Tt)
+#            gt = 0.02
             vt = self.recalc_V(Tt)     
-#            foo=bar
-            
-                
+            # constrain vt
+#            for i in range(len(vt)):
+#                vt[i] *= (1-(4/3)*gt)
+#                vt[i] += (1/3)*gt
+#                print(vt[i])
+#                assert sum(vt[i]) > 0.9999, sum(vt[i])
+#            print([Xi.z for Xi in self.X])
+#            print(Tt[:,0])
+#            print(Tt[:,1])
+#            vt2 = self.recalc_V2(Tt)
+#            self.MIN_THRESHOLD = gt/3
+#            edp = self.expected_p(Tt) - gt
+            edp = self.expected_d(vt) - (self.MIN_THRESHOLD*3*len(vt))
+#            inds = [i for i in range(len(self.CONSENSUS)) if vt[i][c2i[self.CONSENSUS[i]]] != max(vt[i])]
+#            print(len(inds))
+#            for i in inds:
+#                print(vt[i], self.M[i])
+#            edp2 = self.expected_d(vt2)
+#            print(t,pit,gt,edp, end="\r", flush=True)
+            print("********",t,pit,gt,edp)
+#            print("vt", vt[:5])
+
+
+        print(t,pit,gt,edp,"       ")
 
