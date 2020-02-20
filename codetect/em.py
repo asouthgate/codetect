@@ -37,7 +37,7 @@ class EM():
         assert sum(tp) > 0.999
         return tp
 
-    def calTi_pair(self,Xi,pi,g,st,mu):
+    def calTi_pair2(self,Xi,pi,g,st,mu):
         a = Xi.Pmajor(g)
         b = Xi.Pminor2(st,v)
         assert 0 <= a <= 1
@@ -92,8 +92,8 @@ class EM():
         for bw in baseweights:
             maxi = max([j for j in range(4)], key=lambda x:bw[x])
             ststar.append(maxi)
-        diff = ham(ststar,self.CONSENSUS)-minh:
-        if diff >= 0
+        diff = ham(ststar,self.CONSENSUS)-minh
+        if diff >= 0:
             return ststar
         else:
             # IF THE MAXIMUM STRING IS TOO CLOSE, GET THE MAXIMUM STRING SUBJECT TO CONSTRAINTS
@@ -138,7 +138,7 @@ class EM():
         sumo = 0
         assert len(self.CONSENSUS) == len(v)
         for ci, c in enumerate(self.CONSENSUS):
-            alts = [v[ci,j] for j in range(4) if j != c2i[c]]
+            alts = [v[ci,j] for j in range(4) if j != c]
             sumo += sum(alts)
         return sumo
 

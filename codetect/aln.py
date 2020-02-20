@@ -25,7 +25,10 @@ class ReadAln():
                 s += "-"*(diff-1)
             s += self.i2c(base)
             prevpos = pos
-        return s
+        return "ReadAln@pos=%d@count=%d@str=%s" % (self.pos,self.count,s)
+
+    def get_string(self):
+        return "".join([self.i2c(p[1]) for p in self.base_pos_pairs])
 
     def get_aln(self):
         return [[p[0]+self.pos,p[1]] for p in self.base_pos_pairs]
@@ -48,9 +51,14 @@ class ReadAln():
         # Remap other positions
         self.base_pos_pairs = [[new_index_map[bpp[0]+self.pos]-self.pos,bpp[1]] for bpp in self.base_pos_pairs]
         # Shift the position back to zero-first base mapping
+        if len(self.base_pos_pairs) == 0:
+            self.pos = None
+            return False
         mini = self.base_pos_pairs[0][0] 
         self.pos += mini
         self.base_pos_pairs = [[bpp[0]-mini,bpp[1]] for bpp in self.base_pos_pairs]       
+        self.nm = False
+        return True
 
     def append_mapped_base(self, pos, c):
         """ Add a base c at pos to the end of the alignment.
@@ -69,27 +77,53 @@ class ReadAln():
 
     def calc_nm(self, consensus):
         """ Calculate the number of mismatches to the reference. """
-        self.nm = len([pos for pos,c in self.base_pos_pairs if consensus[pos] != c])
+        self.nm = 0
+        for p,c in self.base_pos_pairs:
+#            if self.i2c(c) != consensus[p+self.pos]:
+            if c != consensus[p+self.pos]:
+                self.nm += 1            
+        return self.nm
             
-    def Pmajor(self, gamma, consensus):
+    def Pmajor(self, gamma):
         """ Calculate Pr aln given that it belongs to the major group.
     
         Args:
             gamma: probability of a mismatch through mutation and error.
             consensus: consensus sequence that generates the population.
         """
-        return (gamma ** (self.nm)) * ((1-gamma) ** (len(self.base_pos_pairs) - self.nm))
+#        print(len(self.base_pos_pairs))
+        logp = self.nm*np.log(gamma) + (len(self.base_pos_pairs)-self.nm)*np.log(1-gamma)
+        return np.exp(logp)
 
-    def Pminor(self, M):
+    def Pminor(self, vt):
         """ Calculate Pr aln given that it belongs to minor group.
 
         Args:
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
         sumo = 0
-        for pos,c in self.base_pos_pairs():
-            sumo += np.log(M[c])
-        return sumo
+        for pos,c in self.get_aln():
+#            if vt[pos,c] < 0.99:
+#                print(pos,c,vt[pos,c], np.exp(sumo))
+            sumo += np.log(vt[pos,c])
+        return np.exp(sumo)
+
+    def Pminor2(self, st, mu):
+        """ Calculate Pr aln given that it belongs to minor group.
+
+        Args:
+            M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
+        """
+        sumo = 0
+        for pos,c in self.get_aln():
+#            if vt[pos,c] < 0.99:
+#                print(pos,c,vt[pos,c], np.exp(sumo))
+            if c == st[pos]:
+                sumo += np.log(1-mu)
+            else:
+                sumo += np.log(mu)
+        return np.exp(sumo)
+
 
 if __name__ == "__main__":
     import random
