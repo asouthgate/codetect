@@ -9,16 +9,24 @@ import sys
 import random
 np.set_printoptions(threshold=sys.maxsize)
 
+
 c2i = {c:i for i,c in enumerate("ACGT")}
+def ham(s1, s2):
+    return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
 
 class EM():
-    def __init__(self, X, M, V_INDEX, CONSENSUS):
+    def __init__(self, X, M, V_INDEX, CONSENSUS, EPS):
         self.X = X
         self.N_READS = sum([Xi.count for Xi in self.X])
         self.M = M
         self.V_INDEX = V_INDEX
         self.CONSENSUS = CONSENSUS
         self.MIN_THRESHOLD = 0.001
+        self.EPSILON = EPS
+
+    def print_debug_info(self, Tt):
+        for i in range(20):
+            print(self.X[i].z, Tt[i])
 
     def calTi_pair(self,Xi,pi,g,v):
         a = Xi.Pmajor(g)
@@ -29,8 +37,6 @@ class EM():
         t1i = (pi * a) / c
         t2i = ((1-pi) * b) / c
 #        print(str(Xi)[:50],Xi.z,Xi.nm)
-#        print(a,b,c)
-#        print(pi*a/c, (1-pi)*b/c)
 #        print()
 #        print(a,b,c)
         tp = np.array([t1i,t2i])
@@ -39,17 +45,15 @@ class EM():
 
     def calTi_pair2(self,Xi,pi,g,st,mu):
         a = Xi.Pmajor(g)
-        b = Xi.Pminor2(st,v)
+        b = Xi.Pminor2(st,mu)
         assert 0 <= a <= 1
         assert 0 <= b <= 1
         c = pi*a + (1-pi)*b
         t1i = (pi * a) / c
         t2i = ((1-pi) * b) / c
 #        print(str(Xi)[:50],Xi.z,Xi.nm)
-#        print(a,b,c)
-#        print(pi*a/c, (1-pi)*b/c)
-#        print()
-#        print(a,b,c)
+#        print("a=",a,"b=",b,"c=",c)
+#        print("t=",[t1i,t2i])
         tp = np.array([t1i,t2i])
         assert sum(tp) > 0.999
         return tp
@@ -68,12 +72,41 @@ class EM():
             res.append(pair)
         return np.array(res)
 
+    def recalc_mu(self,T, S):
+        numo = sum([T[i,1]*Xi.count*Xi.cal_ham(S) for i,Xi in enumerate(self.X)])
+        deno = sum([T[i,1]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
+        newmu = numo/deno
+        assert 0 <= newmu <= 1,newmu
+        return newmu
+
     def recalc_gamma(self,T):
         numo = sum([T[i,0]*Xi.count*Xi.nm for i,Xi in enumerate(self.X)])
         deno = sum([T[i,0]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
         newgt = numo/deno
         assert 0 <= newgt <= 1,newgt
         return newgt
+
+    def regularize_st(self,ststar,wmat,diff):
+     # IF THE MAXIMUM STRING IS TOO CLOSE, GET THE MAXIMUM STRING SUBJECT TO CONSTRAINTS
+        maxalts = []
+        for k, bw in enumerate(wmat):
+            # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
+            if ststar[k] == self.CONSENSUS[k]:
+                maxalt = max([j for j in range(4) if j != self.CONSENSUS[k]], key=lambda x:bw[x])
+                assert self.CONSENSUS[k] != maxalt
+                assert bw[self.CONSENSUS[k]] >= bw[maxalt], (self.CONSENSUS[k], bw, maxalt)
+                loss = bw[ststar[k]]-bw[maxalt]
+                maxalts.append([k,maxalt,loss])
+                assert maxalt != self.CONSENSUS[k]
+        maxalts = np.array(maxalts)
+        # Assume sorts small to high, take the last diff
+        toflip = maxalts[np.argsort(maxalts[:,2])][0:diff]
+        for k,maxalt,loss in toflip:
+            assert self.CONSENSUS[int(k)] != maxalt
+            ststar[int(k)] = maxalt
+            assert ststar[int(k)] != self.CONSENSUS[int(k)]
+#            print(k,maxalt,w,wmat[int(k)])
+        return ststar        
 
     def recalc_st(self,T,minh):
         newst = ""
@@ -82,10 +115,12 @@ class EM():
         for k in range(len(self.V_INDEX)):
             v = np.zeros(4)
             totalTk = 0
-            for ri in self.V_INDEX[k]:
-                rib = self.Xi.get_aln()[ri]
-                baseweights[k,rib] += T[ri,1]
-                totalTk += T[ri,1]
+            for j,rl in enumerate(self.V_INDEX[k]):
+                for ri in rl:
+                    Xri = self.X[ri]
+                    rib = Xri.base_pos_pairs[k-Xri.pos][1]
+                    baseweights[k,rib] += T[ri,1]
+                    totalTk += T[ri,1]
             baseweights[k] /= totalTk
         # BUILD THE MAXIMUM STRING
         ststar = []
@@ -96,20 +131,8 @@ class EM():
         if diff >= 0:
             return ststar
         else:
-            # IF THE MAXIMUM STRING IS TOO CLOSE, GET THE MAXIMUM STRING SUBJECT TO CONSTRAINTS
-            maxalts = []
-            for k, bw in enumerate(baseweights):
-                # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
-                if ststar[k] != self.CONSENSUS[k]:
-                    maxalt = [j for j in bw if j != ststar[k]]
-                    loss = bw[ststar[k]]-bw[maxalt]
-                    maxalts.append([maxalt,loss])
-            # Assume sorts small to high, take the last diff
-            toflip = maxalts[np.argsort(maxalts[:,1])][-diff:]
-            for k,w in maxalts:
-                ststar[k] = k
-            return ststar
-
+            return self.regularize_st(ststar,baseweights,diff)
+ 
     def recalc_V(self,T):
         # Regularize by claiming that the probability of a mismatch can never be less than MIN_THRESHOLD
         newv = np.zeros((len(self.V_INDEX),4))
@@ -145,21 +168,26 @@ class EM():
     def init_st(self,M):
         st = []
         for vi,vt in enumerate(M):
-            stups = sorted([j for j in range(vt)],key=lambda j:vt[j])
+            stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             if max(vt) > 0.98:
-                st.append("ACGT"[stups[0]])
+                st.append(stups[-1])
             else:
-                st.append("ACGT"[stups[1]])
-        return "".join(st)
+                st.append(stups[-2])
+        return st
 
-    def do_single(self, N_ITS):
+    def do2(self, N_ITS, debug_minor, debug=False):
         assert len(self.X) > 0
 
 #        vt = np.ones(self.M.shape)
 #        vt *= 0.25
         pit = 0.99
         gt = 0.01
-        st = init_st(self.M)
+        mut = 0.01
+        for row in self.M:
+            for v in row:
+                assert not np.isnan(v)
+        st = self.regularize_st([c for c in self.CONSENSUS],self.M,self.EPSILON)
+        print("starting ham", ham(st, self.CONSENSUS))
 
         for i, Xi in enumerate(self.X):
             for pos,bk in Xi.get_aln():
@@ -167,7 +195,7 @@ class EM():
                 assert i in self.V_INDEX[pos][bk]
                 assert self.M[pos,bk] > 0
 
-        assert len(self.CONSENSUS) == len(vt)
+#        assert len(self.CONSENSUS) == len(vt)
 
         for m in self.M:
             if sum([np.isnan(q) for q in m]) == 0:
@@ -179,20 +207,29 @@ class EM():
 #        print(self.M)
 #        print(self.V_INDEX[:10])
 
-        def ham(s1, s2):
-            return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
  
 #        for Xi in self.X:
 #            print("-"*Xi.pos + Xi.get_string(), ham(Xi.get_string(), self.CONSENSUS), Xi.nm)
 
         for t in range(N_ITS):
-            Tt = self.recalc_T_single(pit,gt,vt)
-#            print(Tt)
+#            print(self.CONSENSUS)
+#            print(debug_minor)
+#            print(st)
+            Tt = self.recalc_T2(pit,gt,st,mut)
             pit = self.recalc_pi(Tt)
+            if sum(Tt[:,1]) < 0.000000001:
+                print("NO MIXTURE", pit)
+                return False
+
             gt = self.recalc_gamma(Tt)
 #            gt = 0.02
-            st = self.recalc_st(Tt)     
-            mut = self.recalc_mu(Tt)
+            st = self.recalc_st(Tt, self.EPSILON)     
+            mut = self.recalc_mu(Tt, st)
+            if mut > 0.5:
+                mut = 0.5
+#            assert mut < 0.2
+            if debug:
+                self.print_debug_info(Tt)
 #            if pit < 0.5:
 #                pit = 0.5
             # constrain vt
@@ -207,18 +244,19 @@ class EM():
 #            vt2 = self.recalc_V2(Tt)
 #            self.MIN_THRESHOLD = gt/3
 #            edp = self.expected_p(Tt) - gt
-            edp = self.expected_d(vt) - (self.MIN_THRESHOLD*3*len(vt))
+#            edp = self.expected_d(vt) - (self.MIN_THRESHOLD*3*len(vt))
 #            inds = [i for i in range(len(self.CONSENSUS)) if vt[i][c2i[self.CONSENSUS[i]]] != max(vt[i])]
 #            print(len(inds))
 #            for i in inds:
 #                print(vt[i], self.M[i])
 #            edp2 = self.expected_d(vt2)
 #            print(t,pit,gt,edp, end="\r", flush=True)
-            print("********",t,pit,gt,edp)
+            print("********",t,pit,gt,mut,ham(st,self.CONSENSUS))
+            assert ham(st, self.CONSENSUS) >= self.EPSILON
 #            print("vt", vt[:5])
 
 
-        print(t,pit,gt,edp,"       ")
+        print("FINISHED, ESTIMATED", t,pit,gt,mut,ham(st,self.CONSENSUS),"       ")
 
 
     def do(self, N_ITS):
@@ -258,11 +296,16 @@ class EM():
 
         for t in range(N_ITS):
             Tt = self.recalc_T(pit,gt,vt)
+            if sum(Tt[:,1]) == 0:
+                print("NO MIXTURE")
+                return False
 #            print(Tt)
             pit = self.recalc_pi(Tt)
             gt = self.recalc_gamma(Tt)
 #            gt = 0.02
             vt = self.recalc_V(Tt)     
+            if debug:
+                print_debug(Tt)
 #            if pit < 0.5:
 #                pit = 0.5
             # constrain vt

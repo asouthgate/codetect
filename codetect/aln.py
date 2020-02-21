@@ -30,6 +30,14 @@ class ReadAln():
     def get_string(self):
         return "".join([self.i2c(p[1]) for p in self.base_pos_pairs])
 
+    def cal_ham(self,S): 
+        # DEPRECIATED, SOMEHOW
+        h = 0
+        for p,b in self.base_pos_pairs:
+            if b != S[self.pos+p]:
+                h += 1
+        return h
+
     def get_aln(self):
         return [[p[0]+self.pos,p[1]] for p in self.base_pos_pairs]
 
@@ -76,11 +84,12 @@ class ReadAln():
         assert self.base_pos_pairs[0][0] == 0, (self.base_pos_pairs, pos, self.pos)
 
     def calc_nm(self, consensus):
+        # TODO: THIS IS SLOW. SHOULD BE CACHED 
         """ Calculate the number of mismatches to the reference. """
         self.nm = 0
-        for p,c in self.base_pos_pairs:
+        for bp,c in self.base_pos_pairs:
 #            if self.i2c(c) != consensus[p+self.pos]:
-            if c != consensus[p+self.pos]:
+            if c != consensus[bp+self.pos]:
                 self.nm += 1            
         return self.nm
             
@@ -102,6 +111,7 @@ class ReadAln():
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
         sumo = 0
+        assert False, "TODO:FIX, SLOW"
         for pos,c in self.get_aln():
 #            if vt[pos,c] < 0.99:
 #                print(pos,c,vt[pos,c], np.exp(sumo))
@@ -115,13 +125,17 @@ class ReadAln():
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
         sumo = 0
-        for pos,c in self.get_aln():
+#        print(self.z)
+#        print(st)
+        for bp,c in self.base_pos_pairs:
 #            if vt[pos,c] < 0.99:
 #                print(pos,c,vt[pos,c], np.exp(sumo))
-            if c == st[pos]:
+            if c == st[bp+self.pos]:
+#                print(self.pos+bp,c,st[self.pos+bp])
                 sumo += np.log(1-mu)
             else:
                 sumo += np.log(mu)
+#        print(np.exp(sumo), mu)
         return np.exp(sumo)
 
 

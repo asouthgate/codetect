@@ -36,13 +36,15 @@ class ReadData():
 #        self.V_INDEX = self.build_Vindex()
 #        sys.stderr.write("Generating starting matrix M\n")
         # Build M matrix
+        print(len(self.V_INDEX))
         self.M = self.reads2mat()
         # Mask low variance positions
-#        sys.stderr.write("Masking low variance positions\n")
-#        self.mask_low_variance_positions()
+        sys.stderr.write("Masking low variance positions\n")
+        self.mask_low_variance_positions()
         # Rebuild V index
-#        sys.stderr.write("Rebuilding V index\n")
-#        self.V_INDEX = self.build_Vindex()
+        sys.stderr.write("Rebuilding V index\n")
+        print(len(self.V_INDEX))
+        self.V_INDEX = self.build_Vindex()
 
     def simple_subsample(self, N_SAMPLES=1000):
         return np.random.choice(self.X, N_SAMPLES, replace=False)
@@ -90,7 +92,7 @@ class ReadData():
             mat[ri] /= sum(mat[ri])
         return mat
 
-    def mask_low_variance_positions(self,t=1.0,mindepth=0):
+    def mask_low_variance_positions(self,t=1.0,mindepth=5):
         """ Mask uninteresting positions of the matrix. """
         def gen_index_remap(L,delinds):
             shift = [0 for i in range(L)]
@@ -101,8 +103,12 @@ class ReadData():
             return {si:si-s for si,s in enumerate(shift)}
         delinds = set()
         for ri,row in enumerate(self.M):
-            if max(row) > t:
+            if max(row) > t or sum([len(k) for k in self.V_INDEX[ri]]) == 0:
                 delinds.add(ri)
+        print("DELETING:",delinds)
+        if len(delinds) == 0:
+            print("deleting none, bailing early")
+            return True
         if len(delinds) == len(self.CONSENSUS):
             raise ValueError("no sites remaining")
         newCONS = [c for ci,c in enumerate(self.CONSENSUS) if ci not in delinds]
@@ -156,13 +162,33 @@ class DataSimulator(ReadData):
 #        plt.hist([Xi.count for Xi in self.X])
 #        plt.show()
 
+        cov0 = np.zeros(len(self.CONSENSUS))
+        cov1 = np.zeros(len(self.CONSENSUS))
+        for Xi in self.X:
+            if Xi.z == 0:
+                cov0[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+            else:
+                assert Xi.z == 1
+                cov1[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+        hamarr = np.zeros(len(self.CONSENSUS))
+        for i,hi in enumerate(self.CONSENSUS):
+            if self.CONSENSUS[i] != c2i[self.minor[i]]:
+                hamarr[i] = 1
+        mc0 = max(cov0)
+        cov0 /= mc0
+        cov1 /= mc0
+        plt.plot(hamarr, color='red')
+        plt.plot(cov0)
+        plt.plot(cov1)
+#        plt.show()
+
         nms = np.array([Xi.calc_nm(self.CONSENSUS) for Xi in self.X])
         assert len(self.V_INDEX) == len(self.M)
         readdists = [Xi.nm for Xi in self.X if Xi.z == 0]
         plt.hist(readdists,bins=100)
         readdists = [Xi.nm for Xi in self.X if Xi.z == 1]
         plt.hist(readdists,bins=100)
-        plt.show()
+#        plt.show()
 #        assert self.CONSENSUS == self.major
 
     def gen_pop(self,L,D):
@@ -198,20 +224,21 @@ class DataSimulator(ReadData):
 
 if __name__ == "__main__":
 #    def __init__(self, N_READS, READ_LENGTH, GENOME_LENGTH, GAMMA, PI, D):
-    for h in [1, 2, 3, 4, 5, 10, 15, 20, 25, 30][::-1]:
+    for h in range(7,13):
+#        h = 4
         PI = 0.8
-#        D = 0.02
+    #        D = 0.02
         D = h
         GAMMA = 0.01
         READLEN = 200
-        L = 2000
+        L = 1000
         NREADS = 1000
         ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D) 
         print("  truepi, truegamma, trueham")
         print(" ",ds.true_pi,ds.true_gamma,ds.true_ham)
-        print("*********PASSING TO EM*********")
-        NITS=10
-        EPS = int(0.01*L)
+        print("*********PASSING TO EM WITH %d MUTATIONS*********" % h)
+        NITS=25
+        EPS = 10
         assert len(ds.X) == NREADS
     #    posreads = []
     #    for Xi in ds.X:
@@ -219,6 +246,7 @@ if __name__ == "__main__":
     #    import mixtest_sub as mts
     #    mts.run(posreads, NREADS, READLEN, GAMMA, D, L, PI, ds.CONSENSUS, ds.true_pi, ds.minor,NITS)
         em = EM(ds.X, ds.M, ds.V_INDEX, ds.CONSENSUS, EPS)
-        em.do2(NITS)
+        em.do2(NITS,  [c2i[c] for c in ds.minor])
+        print()
 
 
