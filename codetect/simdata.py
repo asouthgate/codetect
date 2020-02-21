@@ -168,10 +168,9 @@ class DataSimulator(ReadData):
     def gen_pop(self,L,D):
         major = [random.choice("ATCG") for i in range(self.GENOME_LENGTH)]
         minor = [c for c in major]
-        for j in range(len(minor)):
-            roll = random.uniform(0,1)
-            if roll < D:  
-                minor[j] = random.choice([c for c in "ATCG" if c != minor[j]])
+        mutpos = np.random.choice(len(major), D, replace=False)
+        for j in mutpos:
+            minor[j] = random.choice([c for c in "ATCG" if c != major[j]])
         return "".join(major),"".join(minor)
 
     def sample_reads(self):
@@ -199,24 +198,27 @@ class DataSimulator(ReadData):
 
 if __name__ == "__main__":
 #    def __init__(self, N_READS, READ_LENGTH, GENOME_LENGTH, GAMMA, PI, D):
-    PI = 0.8
-    D = 0.02
-    GAMMA = 0.01
-    READLEN = 200
-    L = 2000
-    NREADS = 1000
-    ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D) 
-    print("  truepi, truegamma, trueham")
-    print(" ",ds.true_pi,ds.true_gamma,ds.true_ham)
-    print("*********PASSING TO EM*********")
-    NITS=100
-    assert len(ds.X) == NREADS
-#    posreads = []
-#    for Xi in ds.X:
-#        posreads.append((Xi.pos, Xi.get_string()))
-#    import mixtest_sub as mts
-#    mts.run(posreads, NREADS, READLEN, GAMMA, D, L, PI, ds.CONSENSUS, ds.true_pi, ds.minor,NITS)
-    em = EM(ds.X, ds.M, ds.V_INDEX, ds.CONSENSUS)
-    em.do(NITS)
+    for h in [1, 2, 3, 4, 5, 10, 15, 20, 25, 30][::-1]:
+        PI = 0.8
+#        D = 0.02
+        D = h
+        GAMMA = 0.01
+        READLEN = 200
+        L = 2000
+        NREADS = 1000
+        ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D) 
+        print("  truepi, truegamma, trueham")
+        print(" ",ds.true_pi,ds.true_gamma,ds.true_ham)
+        print("*********PASSING TO EM*********")
+        NITS=10
+        EPS = int(0.01*L)
+        assert len(ds.X) == NREADS
+    #    posreads = []
+    #    for Xi in ds.X:
+    #        posreads.append((Xi.pos, Xi.get_string()))
+    #    import mixtest_sub as mts
+    #    mts.run(posreads, NREADS, READLEN, GAMMA, D, L, PI, ds.CONSENSUS, ds.true_pi, ds.minor,NITS)
+        em = EM(ds.X, ds.M, ds.V_INDEX, ds.CONSENSUS, EPS)
+        em.do2(NITS)
 
 
