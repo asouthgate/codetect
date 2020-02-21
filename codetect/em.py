@@ -15,7 +15,7 @@ def ham(s1, s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
 
 class EM():
-    def __init__(self, X, M, V_INDEX, CONSENSUS, EPS):
+    def __init__(self, X, M, V_INDEX, CONSENSUS, EPS, cov):
         self.X = X
         self.N_READS = sum([Xi.count for Xi in self.X])
         self.M = M
@@ -23,6 +23,7 @@ class EM():
         self.CONSENSUS = CONSENSUS
         self.MIN_THRESHOLD = 0.001
         self.EPSILON = EPS
+        self.COV = cov
 
     def print_debug_info(self, Tt):
         for i in range(20):
@@ -94,10 +95,11 @@ class EM():
             if ststar[k] == self.CONSENSUS[k]:
                 maxalt = max([j for j in range(4) if j != self.CONSENSUS[k]], key=lambda x:bw[x])
                 assert self.CONSENSUS[k] != maxalt
-                assert bw[self.CONSENSUS[k]] >= bw[maxalt], (self.CONSENSUS[k], bw, maxalt)
-                loss = bw[ststar[k]]-bw[maxalt]
-                maxalts.append([k,maxalt,loss])
-                assert maxalt != self.CONSENSUS[k]
+                assert bw[self.CONSENSUS[k]] >= bw[maxalt], (k,self.CONSENSUS[k], bw, maxalt)
+                if bw[maxalt] > 0:
+                    loss = bw[ststar[k]]-bw[maxalt]
+                    maxalts.append([k,maxalt,loss])
+                    assert maxalt != self.CONSENSUS[k]
         maxalts = np.array(maxalts)
         # Assume sorts small to high, take the last diff
         toflip = maxalts[np.argsort(maxalts[:,2])][0:diff]
@@ -108,8 +110,7 @@ class EM():
 #            print(k,maxalt,w,wmat[int(k)])
         return ststar        
 
-    def recalc_st(self,T,minh):
-        newst = ""
+    def get_weight_base_array(self, T):
         baseweights = np.zeros((len(self.CONSENSUS), 4))
         # FIRST CALCULATE THE MOST WEIGHTY BASE FOR EACH POSITION
         for k in range(len(self.V_INDEX)):
@@ -122,7 +123,11 @@ class EM():
                     baseweights[k,rib] += T[ri,1]
                     totalTk += T[ri,1]
             baseweights[k] /= totalTk
+        return baseweights
+
+    def recalc_st(self,T,minh):
         # BUILD THE MAXIMUM STRING
+        baseweights = self.get_weight_base_array(T)
         ststar = []
         for bw in baseweights:
             maxi = max([j for j in range(4)], key=lambda x:bw[x])
@@ -230,6 +235,12 @@ class EM():
 #            assert mut < 0.2
             if debug:
                 self.print_debug_info(Tt)
+
+            baseweights = self.get_weight_base_array(Tt)
+            for k, bw in enumerate(baseweights):
+                if st[k] != self.CONSENSUS[k]:
+                    print("pos=",k,"cons=",self.CONSENSUS[k], "minor=",st[k],"weights=",bw, "cov=",self.COV[k], "M=", self.M[k])
+
 #            if pit < 0.5:
 #                pit = 0.5
             # constrain vt
@@ -258,78 +269,4 @@ class EM():
 
         print("FINISHED, ESTIMATED", t,pit,gt,mut,ham(st,self.CONSENSUS),"       ")
 
-
-    def do(self, N_ITS):
-        assert len(self.X) > 0
-
-        vt = self.M
-#        vt = np.ones(self.M.shape)
-#        vt *= 0.25
-        pit = 0.99
-        gt = 0.01
-
-        print(type(vt))
-
-        for i, Xi in enumerate(self.X):
-            for pos,bk in Xi.get_aln():
-                assert Xi.i2c(bk) != "-"
-                assert i in self.V_INDEX[pos][bk]
-                assert self.M[pos,bk] > 0
-
-        assert len(self.CONSENSUS) == len(vt)
-
-        for m in self.M:
-            if sum([np.isnan(q) for q in m]) == 0:
-                assert sum(m) > 0.98, m
-
-        assert len(self.V_INDEX) == len(self.M)
-        assert 0 <= gt <= 1,gt
-
-#        print(self.M)
-#        print(self.V_INDEX[:10])
-
-        def ham(s1, s2):
-            return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
- 
-#        for Xi in self.X:
-#            print("-"*Xi.pos + Xi.get_string(), ham(Xi.get_string(), self.CONSENSUS), Xi.nm)
-
-        for t in range(N_ITS):
-            Tt = self.recalc_T(pit,gt,vt)
-            if sum(Tt[:,1]) == 0:
-                print("NO MIXTURE")
-                return False
-#            print(Tt)
-            pit = self.recalc_pi(Tt)
-            gt = self.recalc_gamma(Tt)
-#            gt = 0.02
-            vt = self.recalc_V(Tt)     
-            if debug:
-                print_debug(Tt)
-#            if pit < 0.5:
-#                pit = 0.5
-            # constrain vt
-#            for i in range(len(vt)):
-#                vt[i] *= (1-(4/3)*gt)
-#                vt[i] += (1/3)*gt
-#                print(vt[i])
-#                assert sum(vt[i]) > 0.9999, sum(vt[i])
-#            print([Xi.z for Xi in self.X])
-#            print(Tt[:,0])
-#            print(Tt[:,1])
-#            vt2 = self.recalc_V2(Tt)
-#            self.MIN_THRESHOLD = gt/3
-#            edp = self.expected_p(Tt) - gt
-            edp = self.expected_d(vt) - (self.MIN_THRESHOLD*3*len(vt))
-#            inds = [i for i in range(len(self.CONSENSUS)) if vt[i][c2i[self.CONSENSUS[i]]] != max(vt[i])]
-#            print(len(inds))
-#            for i in inds:
-#                print(vt[i], self.M[i])
-#            edp2 = self.expected_d(vt2)
-#            print(t,pit,gt,edp, end="\r", flush=True)
-            print("********",t,pit,gt,edp)
-#            print("vt", vt[:5])
-
-
-        print(t,pit,gt,edp,"       ")
 
