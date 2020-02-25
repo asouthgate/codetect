@@ -14,7 +14,6 @@ class ReadData():
     """
     def __init__(self,X,consensus):        
         self.CONSENSUS = consensus
-#        print(self.CONSENSUS)
         assert self.CONSENSUS[0] in [0,1,2,3]
         self.X = X
         # Build V index
@@ -22,7 +21,7 @@ class ReadData():
         self.V_INDEX = self.build_Vindex()
 #        # Subsample
         sys.stderr.write("Subsampling across the reference\n")
-       # self.X = self.subsample()
+        self.X = self.subsample()
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
@@ -41,11 +40,9 @@ class ReadData():
         self.mask_low_variance_positions()
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
-        print(len(self.V_INDEX))
         self.V_INDEX = self.build_Vindex()
         sys.stderr.write("Recalculating matrix M\n")
         # Build M matrix
-        print(len(self.V_INDEX))
         self.M = self.reads2mat()
 
     def simple_subsample(self, N_SAMPLES=500):
@@ -91,7 +88,8 @@ class ReadData():
             for pos,c in Xi.get_aln():
                 mat[pos,c] += Xi.count
         for ri in range(len(mat)):
-            mat[ri] /= sum(mat[ri])
+            if sum(mat[ri]) > 0:
+                mat[ri] /= sum(mat[ri])
         return mat
 
     def mask_low_variance_positions(self,t=0.98,mindepth=5):
@@ -105,16 +103,12 @@ class ReadData():
             return {si:si-s for si,s in enumerate(shift)}
         delinds = set()
         for ri,row in enumerate(self.M):
-            if max(row) > t:
-#                print("deleting lw diversity row", row)
+            if max(row) > t or max(row) == 0:
                 delinds.add(ri)
             if sum([len(k) for k in self.V_INDEX[ri]]) == 0:
-#                print("deleting zero cov row", row)
                 delinds.add(ri)
-
-        print("DELETING:",sorted(delinds))
+        sys.stderr.write("Deleting %d positions\n"% len(delinds))
         if len(delinds) == 0:
-            print("deleting none, bailing early")
             return True
         if len(delinds) == len(self.CONSENSUS):
             raise ValueError("no sites remaining")

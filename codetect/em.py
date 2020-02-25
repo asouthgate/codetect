@@ -94,8 +94,9 @@ class EM():
             # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
             if ststar[k] == self.CONSENSUS[k]:
                 maxalt = max([j for j in range(4) if j != self.CONSENSUS[k]], key=lambda x:bw[x])
-                assert self.CONSENSUS[k] != maxalt
-                assert bw[self.CONSENSUS[k]] >= bw[maxalt], (k,self.CONSENSUS[k], bw, maxalt)
+#                assert self.CONSENSUS[k] != maxalt
+#                assert bw[ststar[k]] >= bw[maxalt]
+#                assert bw[self.CONSENSUS[k]] >= bw[maxalt], (k,self.CONSENSUS[k], bw, maxalt)
                 if bw[maxalt] > 0:
                     loss = bw[ststar[k]]-bw[maxalt]
                     maxalts.append([k,maxalt,loss])
@@ -192,7 +193,6 @@ class EM():
             for v in row:
                 assert not np.isnan(v)
         st = self.regularize_st([c for c in self.CONSENSUS],self.M,self.EPSILON)
-        print("starting ham", ham(st, self.CONSENSUS))
 
         for i, Xi in enumerate(self.X):
             for pos,bk in Xi.get_aln():
@@ -220,23 +220,22 @@ class EM():
             Tt = self.recalc_T2(pit,gt,st,mut)
             pit = self.recalc_pi(Tt)
             if sum(Tt[:,1]) < 1.0/1000000000:
-                print()
-                print("No coinfection detected!", pit)
+                sys.stderr.write("No coinfection detected.\n")
                 return False
 
             gt = self.recalc_gamma(Tt)
             st = self.recalc_st(Tt, self.EPSILON)     
             mut = self.recalc_mu(Tt, st)
 
-            print(t,pit,gt,ham(st,self.CONSENSUS),"      ", end="\r", flush=True)
+            sys.stderr.write("%d,%f,%f,%d\n" % (pit,pit,gt,ham(st,self.CONSENSUS)))
+#            print(t,pit,gt,ham(st,self.CONSENSUS),"      ", end="\r", flush=True)
+
 #            print("********",t,pit,gt,mut,ham(st,self.CONSENSUS))
             assert ham(st, self.CONSENSUS) >= self.EPSILON
 
-        if pit > 0.995:
-            print()
-            print("No coinfection detected!", pit)
+        if pit > 0.99:
+            sys.stderr.write("No coinfection detected!\n")
             return False
         
-        print()
-        print("Coinfection detected!",flush=True)
+        sys.stderr.write("Coinfection detected!\n")
         return True
