@@ -22,7 +22,7 @@ class ReadData():
         self.V_INDEX = self.build_Vindex()
 #        # Subsample
         sys.stderr.write("Subsampling across the reference\n")
-        self.X = self.subsample()
+       # self.X = self.subsample()
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")

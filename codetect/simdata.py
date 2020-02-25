@@ -12,15 +12,24 @@ class DataSimulator(ReadData):
         self.READ_LENGTH = READ_LENGTH
         self.GENOME_LENGTH = GENOME_LENGTH
         self.GAMMA = GAMMA
+        self.MU = 0.005
         self.PI = PI
         self.D = D    
         sys.stderr.write("Generating population\n")
-        self.major, self.minor = self.gen_pop(GENOME_LENGTH, D)
+        self.major, self.minor = self.gen_pair(GENOME_LENGTH, D)
+        self.majorpop = self.gen_population(self.major, self.MU)
+        self.minorpop = self.gen_population(self.minor, self.MU)
         self.CONSENSUS = self.major
+        minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
+        majorhams = [ham(self.major, s) for s in self.majorpop[0]]
+        plt.bar(x=minorhams, height=self.majorpop[1])
+        plt.show()
+        plt.bar(x=minorhams, height=self.minorpop[1])
+        plt.show()
         self.true_ham = ham(self.major,self.minor)
         assert self.true_ham > 0.0
         self.true_pid = self.true_ham/len(self.major)
-        self.POPULATION = [self.major,self.minor]
+       # self.POPULATION = [self.major,self.minor]
         sys.stderr.write("Simulating reads\n")
         self.CONSENSUS = [c2i[c] for c in self.CONSENSUS]
         self.X = self.sample_reads()
@@ -73,9 +82,41 @@ class DataSimulator(ReadData):
         readdists = [Xi.nm for Xi in self.X if Xi.z == 1]
         plt.hist(readdists,bins=100)
         plt.show()
-#        assert self.CONSENSUS == self.major
 
-    def gen_pop(self,L,D):
+    def random_coverage_walk(self):
+        # A discrete random walk, normalized such that the sum is 1;
+        # I.e. a correlated probability distribution to weight coverage
+        # simple diffusion; up and down with equal probability except at zero
+        # One issue with this is that assembled sequences should have full coverage
+        xs = np.zeros(self.GENOME_LENGTH-self.READ_LENGTH+1)
+        x = 0
+        for i in range(len(xs)):
+            step = random.choice([1,-1])
+            x += step
+            xs[i] = min(20,max(1,x))
+        xs /= sum(xs)
+        # Now guarantee there is some coverage... like 5% of maximum
+        plt.plot(xs)
+        plt.show()
+        assert min(xs) > 0
+        return xs
+
+    def mutate_perbase(self, seq, mutp):
+        res = [c for c in seq]
+        for i in range(len(res)):
+            roll = random.uniform(0,1)
+            if roll < mutp:
+                res[i] = random.choice([c for c in "ATCG" if res[i] != c])
+        return "".join(res)
+
+    def gen_population(self, major, mutp):
+        props = sorted(np.random.dirichlet((1.0,1.0,1.0,1.0,1.0)))
+        print("props", props)
+        minorseqs = [self.mutate_perbase(major, mutp) for i in props[:-1]]
+        return minorseqs + [major], props
+
+    def gen_pair(self,L,D):
+        # Mutates by a fixed number
         major = [random.choice("ATCG") for i in range(self.GENOME_LENGTH)]
         minor = [c for c in major]
         mutpos = np.random.choice(len(major), D, replace=False)
@@ -88,11 +129,17 @@ class DataSimulator(ReadData):
         w = [self.PI, 1-self.PI]
         assert w[0] == max(w), "first sequence should be the major var"
         X = []
+        covwalk = self.random_coverage_walk()
+        plt.plot(covwalk)
+        plt.show()
+        pops = [self.majorpop, self.minorpop]
         for i in range(self.N_READS):
             seqi = np.random.choice([0,1],p=w)
-            assert len(self.POPULATION) > 1
-            seq = self.POPULATION[seqi]
-            randpos = np.random.randint(0,len(seq)-self.READ_LENGTH+1)
+         #   assert len(self.POPULATION) > 1
+            popseqs, popfreqs = pops[seqi]
+            seq = np.random.choice(popseqs, p=popfreqs)
+  #          randpos = np.random.randint(0,len(seq)-self.READ_LENGTH+1)
+            randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=covwalk)
             sampinds = [randpos+l for l in range(self.READ_LENGTH)]
             aln = ReadAln(i)
             for si in sampinds:
@@ -117,7 +164,7 @@ if __name__ == "__main__":
         GAMMA = 0.03
         READLEN = 200
         L = 2000
-        NREADS = 5000
+        NREADS = 2000
         ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D) 
         print("  truepi, truegamma, trueham")
         print(" ",ds.true_pi,ds.true_gamma,ds.true_ham)
