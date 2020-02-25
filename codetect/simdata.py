@@ -3,6 +3,7 @@ import random
 import matplotlib.pyplot as plt
 from  em import *
 from aln import ReadAln
+import copy
 
 def ham(s1, s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
@@ -22,21 +23,21 @@ class ReadData():
         # Build V index
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
-        # Subsample
+#        # Subsample
         sys.stderr.write("Subsampling across the reference\n")
-        self.X = self.simple_subsample()
+        self.X = self.subsample()
+        sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
         self.V_INDEX = self.build_Vindex()
-#        sys.stderr.write("Counting duplicate reads\n")
+        sys.stderr.write("Counting duplicate reads\n")
         # Deduplicate/count datapoints in X
-#        self.X = self.deduplicate(self.X)
-#        sys.stderr.write("Rebuilding V index\n")
+        self.X = self.deduplicate(self.X)
+        sys.stderr.write("Rebuilding V index\n")
         # Rebuild V index
-#        self.V_INDEX = self.build_Vindex()
-#        sys.stderr.write("Generating starting matrix M\n")
+        self.V_INDEX = self.build_Vindex()
+        sys.stderr.write("Generating starting matrix M\n")
         # Build M matrix
-        print(len(self.V_INDEX))
         self.M = self.reads2mat()
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
@@ -45,8 +46,12 @@ class ReadData():
         sys.stderr.write("Rebuilding V index\n")
         print(len(self.V_INDEX))
         self.V_INDEX = self.build_Vindex()
+        sys.stderr.write("Recalculating matrix M\n")
+        # Build M matrix
+        print(len(self.V_INDEX))
+        self.M = self.reads2mat()
 
-    def simple_subsample(self, N_SAMPLES=1000):
+    def simple_subsample(self, N_SAMPLES=500):
         return np.random.choice(self.X, N_SAMPLES, replace=False)
 
     def subsample(self, N_SAMPLES=1000):
@@ -92,7 +97,7 @@ class ReadData():
             mat[ri] /= sum(mat[ri])
         return mat
 
-    def mask_low_variance_positions(self,t=1.0,mindepth=5):
+    def mask_low_variance_positions(self,t=0.98,mindepth=5):
         """ Mask uninteresting positions of the matrix. """
         def gen_index_remap(L,delinds):
             shift = [0 for i in range(L)]
@@ -103,9 +108,14 @@ class ReadData():
             return {si:si-s for si,s in enumerate(shift)}
         delinds = set()
         for ri,row in enumerate(self.M):
-            if max(row) > t or sum([len(k) for k in self.V_INDEX[ri]]) == 0:
+            if max(row) > t:
+#                print("deleting lw diversity row", row)
                 delinds.add(ri)
-        print("DELETING:",delinds)
+            if sum([len(k) for k in self.V_INDEX[ri]]) == 0:
+#                print("deleting zero cov row", row)
+                delinds.add(ri)
+
+        print("DELETING:",sorted(delinds))
         if len(delinds) == 0:
             print("deleting none, bailing early")
             return True
@@ -116,13 +126,23 @@ class ReadData():
         delindsl = sorted(delinds)
         # Get rid of any empty strings after deletion
         newX = []
+        remap = gen_index_remap(len(self.CONSENSUS),delinds)
         for Xi in self.X:
-            res = Xi.del_inds(delindsl,gen_index_remap(len(self.CONSENSUS),delinds))
+            #SAFEGUARD
+            prepos = Xi.pos
+            prestr = Xi.get_string()
+            prestr2 = "".join([c for ci,c in enumerate(prestr) if Xi.pos+ci not in delinds])
+            res = Xi.del_inds(delindsl,remap)
+            poststr = Xi.get_string()        
+            pushback = 0
+            for ci,c in enumerate(prestr2):
+                assert poststr[ci] == c
             if res:
                 newX.append(Xi)
         self.X = newX
         self.CONSENSUS = newCONS
         self.M = np.array(Msub)
+        self.minor = [c for ci,c in enumerate(self.minor) if ci not in delinds]
         assert len(self.M) == len(self.CONSENSUS) 
 
 class DataSimulator(ReadData):
@@ -170,6 +190,9 @@ class DataSimulator(ReadData):
             else:
                 assert Xi.z == 1
                 cov1[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+        self.COV = cov0+cov1
+        for k in range(len(self.COV)):
+            assert self.COV[k] == sum([len(l) for l in self.V_INDEX[k]])
         hamarr = np.zeros(len(self.CONSENSUS))
         for i,hi in enumerate(self.CONSENSUS):
             if self.CONSENSUS[i] != c2i[self.minor[i]]:
@@ -180,7 +203,7 @@ class DataSimulator(ReadData):
         plt.plot(hamarr, color='red')
         plt.plot(cov0)
         plt.plot(cov1)
-#        plt.show()
+        plt.show()
 
         nms = np.array([Xi.calc_nm(self.CONSENSUS) for Xi in self.X])
         assert len(self.V_INDEX) == len(self.M)
@@ -188,13 +211,14 @@ class DataSimulator(ReadData):
         plt.hist(readdists,bins=100)
         readdists = [Xi.nm for Xi in self.X if Xi.z == 1]
         plt.hist(readdists,bins=100)
-#        plt.show()
+        plt.show()
 #        assert self.CONSENSUS == self.major
 
     def gen_pop(self,L,D):
         major = [random.choice("ATCG") for i in range(self.GENOME_LENGTH)]
         minor = [c for c in major]
         mutpos = np.random.choice(len(major), D, replace=False)
+        sys.stderr.write("Mutating positions" + str(sorted(mutpos)) + "\n")
         for j in mutpos:
             minor[j] = random.choice([c for c in "ATCG" if c != major[j]])
         return "".join(major),"".join(minor)
@@ -224,28 +248,28 @@ class DataSimulator(ReadData):
 
 if __name__ == "__main__":
 #    def __init__(self, N_READS, READ_LENGTH, GENOME_LENGTH, GAMMA, PI, D):
-    for h in range(7,13):
+    for h in range(18,25):
 #        h = 4
-        PI = 0.8
+        PI = 0.95
     #        D = 0.02
         D = h
-        GAMMA = 0.01
+        GAMMA = 0.03
         READLEN = 200
-        L = 1000
-        NREADS = 1000
+        L = 2000
+        NREADS = 5000
         ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D) 
         print("  truepi, truegamma, trueham")
         print(" ",ds.true_pi,ds.true_gamma,ds.true_ham)
         print("*********PASSING TO EM WITH %d MUTATIONS*********" % h)
-        NITS=25
-        EPS = 10
-        assert len(ds.X) == NREADS
+        NITS=10
+        EPS = 20
+#        assert len(ds.X) == NREADS
     #    posreads = []
     #    for Xi in ds.X:
     #        posreads.append((Xi.pos, Xi.get_string()))
     #    import mixtest_sub as mts
     #    mts.run(posreads, NREADS, READLEN, GAMMA, D, L, PI, ds.CONSENSUS, ds.true_pi, ds.minor,NITS)
-        em = EM(ds.X, ds.M, ds.V_INDEX, ds.CONSENSUS, EPS)
+        em = EM(ds.X, ds.M, ds.V_INDEX, ds.CONSENSUS, EPS, ds.COV)
         em.do2(NITS,  [c2i[c] for c in ds.minor])
         print()
 

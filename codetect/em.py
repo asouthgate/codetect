@@ -78,7 +78,7 @@ class EM():
         deno = sum([T[i,1]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
         newmu = numo/deno
         assert 0 <= newmu <= 1,newmu
-        return newmu
+        return min(newmu,0.5)
 
     def recalc_gamma(self,T):
         numo = sum([T[i,0]*Xi.count*Xi.nm for i,Xi in enumerate(self.X)])
@@ -217,56 +217,26 @@ class EM():
 #            print("-"*Xi.pos + Xi.get_string(), ham(Xi.get_string(), self.CONSENSUS), Xi.nm)
 
         for t in range(N_ITS):
-#            print(self.CONSENSUS)
-#            print(debug_minor)
-#            print(st)
             Tt = self.recalc_T2(pit,gt,st,mut)
             pit = self.recalc_pi(Tt)
-            if sum(Tt[:,1]) < 0.000000001:
-                print("NO MIXTURE", pit)
+            if sum(Tt[:,1]) < 1.0/1000000000:
+                print()
+                print("No coinfection detected!", pit)
                 return False
 
             gt = self.recalc_gamma(Tt)
-#            gt = 0.02
             st = self.recalc_st(Tt, self.EPSILON)     
             mut = self.recalc_mu(Tt, st)
-            if mut > 0.5:
-                mut = 0.5
-#            assert mut < 0.2
-            if debug:
-                self.print_debug_info(Tt)
 
-            baseweights = self.get_weight_base_array(Tt)
-            for k, bw in enumerate(baseweights):
-                if st[k] != self.CONSENSUS[k]:
-                    print("pos=",k,"cons=",self.CONSENSUS[k], "minor=",st[k],"weights=",bw, "cov=",self.COV[k], "M=", self.M[k])
-
-#            if pit < 0.5:
-#                pit = 0.5
-            # constrain vt
-#            for i in range(len(vt)):
-#                vt[i] *= (1-(4/3)*gt)
-#                vt[i] += (1/3)*gt
-#                print(vt[i])
-#                assert sum(vt[i]) > 0.9999, sum(vt[i])
-#            print([Xi.z for Xi in self.X])
-#            print(Tt[:,0])
-#            print(Tt[:,1])
-#            vt2 = self.recalc_V2(Tt)
-#            self.MIN_THRESHOLD = gt/3
-#            edp = self.expected_p(Tt) - gt
-#            edp = self.expected_d(vt) - (self.MIN_THRESHOLD*3*len(vt))
-#            inds = [i for i in range(len(self.CONSENSUS)) if vt[i][c2i[self.CONSENSUS[i]]] != max(vt[i])]
-#            print(len(inds))
-#            for i in inds:
-#                print(vt[i], self.M[i])
-#            edp2 = self.expected_d(vt2)
-#            print(t,pit,gt,edp, end="\r", flush=True)
-            print("********",t,pit,gt,mut,ham(st,self.CONSENSUS))
+            print(t,pit,gt,ham(st,self.CONSENSUS),"      ", end="\r", flush=True)
+#            print("********",t,pit,gt,mut,ham(st,self.CONSENSUS))
             assert ham(st, self.CONSENSUS) >= self.EPSILON
-#            print("vt", vt[:5])
 
-
-        print("FINISHED, ESTIMATED", t,pit,gt,mut,ham(st,self.CONSENSUS),"       ")
-
-
+        if pit > 0.995:
+            print()
+            print("No coinfection detected!", pit)
+            return False
+        
+        print()
+        print("Coinfection detected!",flush=True)
+        return True
