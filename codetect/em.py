@@ -15,7 +15,7 @@ def ham(s1, s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
 
 class EM():
-    def __init__(self, X, M, V_INDEX, CONSENSUS, EPS, cov):
+    def __init__(self, X, M, V_INDEX, CONSENSUS, EPS):
         self.X = X
         self.N_READS = sum([Xi.count for Xi in self.X])
         self.M = M
@@ -23,7 +23,6 @@ class EM():
         self.CONSENSUS = CONSENSUS
         self.MIN_THRESHOLD = 0.001
         self.EPSILON = EPS
-        self.COV = cov
 
     def print_debug_info(self, Tt):
         for i in range(20):
@@ -45,18 +44,28 @@ class EM():
         return tp
 
     def calTi_pair2(self,Xi,pi,g,st,mu):
-        a = Xi.Pmajor(g)
-        b = Xi.Pminor2(st,mu)
-        assert 0 <= a <= 1
-        assert 0 <= b <= 1
-        c = pi*a + (1-pi)*b
-        t1i = (pi * a) / c
-        t2i = ((1-pi) * b) / c
+        a = Xi.logPmajor(g)
+        b = Xi.logPminor2(st,mu)
+#        assert 0 <= a <= 1, a
+#        assert 0 <= b <= 1, b
+        l1 = a
+        l2 = b
+        lw1 = np.log(pi)
+        lw2 = np.log(1-pi)
+        alpha = max([l1 + lw1, l2 + lw2])
+        exp1 = np.exp(l1 + lw1 - alpha)
+        exp2 = np.exp(l2 + lw2 - alpha)
+        c = exp1 + exp2
+        t1i = exp1/c
+        t2i = exp2/c
+#        c = pi*a + (1-pi)*b
+#        t1i = (pi * a) / c
+#        t2i = ((1-pi) * b) / c
 #        print(str(Xi)[:50],Xi.z,Xi.nm)
 #        print("a=",a,"b=",b,"c=",c)
 #        print("t=",[t1i,t2i])
         tp = np.array([t1i,t2i])
-        assert sum(tp) > 0.999
+        assert sum(tp) > 0.999, sum(tp)
         return tp
  
     def recalc_T(self,pi,g,v):
@@ -76,6 +85,7 @@ class EM():
     def recalc_mu(self,T, S):
         numo = sum([T[i,1]*Xi.count*Xi.cal_ham(S) for i,Xi in enumerate(self.X)])
         deno = sum([T[i,1]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
+        assert deno > 0
         newmu = numo/deno
         assert 0 <= newmu <= 1,newmu
         return min(newmu,0.5)
@@ -130,14 +140,16 @@ class EM():
         # BUILD THE MAXIMUM STRING
         baseweights = self.get_weight_base_array(T)
         ststar = []
-        for bw in baseweights:
+        for bi,bw in enumerate(baseweights):
             maxi = max([j for j in range(4)], key=lambda x:bw[x])
             ststar.append(maxi)
+#            print(bi,bw,self.CONSENSUS[bi],maxi)
         diff = ham(ststar,self.CONSENSUS)-minh
         if diff >= 0:
             return ststar
         else:
             return self.regularize_st(ststar,baseweights,diff)
+#            return ststar
  
     def recalc_V(self,T):
         # Regularize by claiming that the probability of a mismatch can never be less than MIN_THRESHOLD
@@ -172,70 +184,60 @@ class EM():
         return sumo
 
     def init_st(self,M):
-        st = []
+        st = [c for c in self.CONSENSUS]
+        second_best = []
         for vi,vt in enumerate(M):
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
-            if max(vt) > 0.98:
-                st.append(stups[-1])
-            else:
-                st.append(stups[-2])
+            sb = stups[-2]
+            if vt[sb] > 0:
+                second_best.append((vt[sb],vi,sb))
+        second_best = sorted(second_best,key=lambda x:x[0])
+        for val,vi,sb in second_best[-self.EPSILON:]:
+            st[vi] = sb
         return st
 
     def do2(self, N_ITS, debug_minor, debug=False):
-        assert len(self.X) > 0
 
-#        vt = np.ones(self.M.shape)
-#        vt *= 0.25
-        pit = 0.99
+        pit = 0.5
         gt = 0.01
         mut = 0.01
+        st = self.init_st(self.M)
+        
+
+        # Assertions
         for row in self.M:
             for v in row:
                 assert not np.isnan(v)
-        st = self.regularize_st([c for c in self.CONSENSUS],self.M,self.EPSILON)
-
+        assert len(self.X) > 0
         for i, Xi in enumerate(self.X):
             for pos,bk in Xi.get_aln():
                 assert Xi.i2c(bk) != "-"
                 assert i in self.V_INDEX[pos][bk]
                 assert self.M[pos,bk] > 0
-
-#        assert len(self.CONSENSUS) == len(vt)
-
         for m in self.M:
-            if sum([np.isnan(q) for q in m]) == 0:
+            if sum([q for q in m]) > 0:
                 assert sum(m) > 0.98, m
-
         assert len(self.V_INDEX) == len(self.M)
         assert 0 <= gt <= 1,gt
-
-#        print(self.M)
-#        print(self.V_INDEX[:10])
-
- 
-#        for Xi in self.X:
-#            print("-"*Xi.pos + Xi.get_string(), ham(Xi.get_string(), self.CONSENSUS), Xi.nm)
+        assert ham(st, self.CONSENSUS) >= self.EPSILON, ham(st, self.CONSENSUS)
 
         for t in range(N_ITS):
+            sys.stderr.write("Iteration:%d,%f,%f,%d\n" % (t,pit,gt,ham(st,self.CONSENSUS)))
+            assert ham(st, self.CONSENSUS) >= self.EPSILON
             Tt = self.recalc_T2(pit,gt,st,mut)
-            pit = self.recalc_pi(Tt)
-            if sum(Tt[:,1]) < 1.0/1000000000:
+            if sum(Tt[:,1]) == 0:
                 sys.stderr.write("No coinfection detected.\n")
-                return False
+                return False,st,Tt
 
+            pit = self.recalc_pi(Tt)
             gt = self.recalc_gamma(Tt)
             st = self.recalc_st(Tt, self.EPSILON)     
             mut = self.recalc_mu(Tt, st)
 
-            sys.stderr.write("%d,%f,%f,%d\n" % (pit,pit,gt,ham(st,self.CONSENSUS)))
-#            print(t,pit,gt,ham(st,self.CONSENSUS),"      ", end="\r", flush=True)
-
-#            print("********",t,pit,gt,mut,ham(st,self.CONSENSUS))
-            assert ham(st, self.CONSENSUS) >= self.EPSILON
 
         if pit > 0.99:
             sys.stderr.write("No coinfection detected!\n")
-            return False
+            return False, st, Tt
         
         sys.stderr.write("Coinfection detected!\n")
-        return True
+        return True, st, Tt
