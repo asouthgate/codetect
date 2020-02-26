@@ -37,7 +37,7 @@ class ReadData():
         self.M = self.reads2mat()
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-#        self.mask_low_variance_positions()
+        self.mask_low_variance_positions()
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
         self.V_INDEX = self.build_Vindex()
@@ -46,6 +46,12 @@ class ReadData():
         self.M = self.reads2mat()
         # Calculate the number of mismatches
         [Xi.calc_nm(self.CONSENSUS) for Xi in self.X]
+        self.test_v_array()
+
+    def test_v_array(self):
+        for i,Xi in enumerate(self.X):
+            for pos,b in Xi.get_aln():
+                assert i in self.V_INDEX[pos][b], (i, self.V_INDEX[pos])
 
     def simple_subsample(self, N_SAMPLES=500):
         return np.random.choice(self.X, N_SAMPLES, replace=False)
@@ -94,7 +100,7 @@ class ReadData():
                 mat[ri] /= sum(mat[ri])
         return mat
 
-    def mask_low_variance_positions(self,t=1.0,mindepth=100):
+    def mask_low_variance_positions(self,t=1.0,mindepth=20):
         """ Mask uninteresting positions of the matrix. """
         def gen_index_remap(L,delinds):
             shift = [0 for i in range(L)]

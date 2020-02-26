@@ -135,7 +135,8 @@ class EM():
                     rib = Xri.base_pos_pairs[k-Xri.pos][1]
                     baseweights[k,rib] += T[ri,1]
                     totalTk += T[ri,1]
-            baseweights[k] /= totalTk
+            if totalTk > 0:
+                baseweights[k] /= totalTk
         return baseweights
 
     def recalc_st(self,T,minh):
@@ -144,7 +145,10 @@ class EM():
         ststar = []
         for bi,bw in enumerate(baseweights):
             maxi = max([j for j in range(4)], key=lambda x:bw[x])
-            ststar.append(maxi)
+            if sum(bw) > 0:
+                ststar.append(maxi)
+            else:
+                ststar.append(self.CONSENSUS[bi])
 #            print(bi,bw,self.CONSENSUS[bi],maxi)
         diff = ham(ststar,self.CONSENSUS)-minh
         if diff >= 0:
@@ -224,7 +228,7 @@ class EM():
         assert ham(st, self.CONSENSUS) >= self.EPSILON, ham(st, self.CONSENSUS)
 
         for t in range(N_ITS):
-            sys.stderr.write("Iteration:%d,%f,%f,%d\n" % (t,pit,gt,ham(st,self.CONSENSUS)))
+            sys.stderr.write("Iteration:%d,%f,%f,%f,%d\n" % (t,pit,mut,gt,ham(st,self.CONSENSUS)))
             assert ham(st, self.CONSENSUS) >= self.EPSILON
             Tt = self.recalc_T2(pit,gt,st,mut)
             if sum(Tt[:,1]) == 0:

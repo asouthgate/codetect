@@ -138,6 +138,23 @@ class DataSimulator(ReadData):
         for i in range(len(self.CONSENSUS)):
             if st[i] == self.CONSENSUS[i] and self.CONSENSUS[i] != c2i[self.minor[i]]:
                 print(i, st[i], self.CONSENSUS[i], c2i[self.minor[i]], self.M[i], bw[i])
+        z1reads = [Xi for Xi in self.X if Xi.z == 1]
+        z1M = np.zeros((len(self.CONSENSUS), 4))
+        for Xi in z1reads:
+            for pos,b in Xi.get_aln():
+                z1M[pos,b] += 1
+        wba = self.get_weight_base_array(T)
+        pbweights = []
+        for i in range(len(self.V_INDEX)):
+            tmp = []
+            for ri in self.V_INDEX[i]:
+                tmp.append(T[ri,1])
+            pbweights.append(tmp)
+        for i,c in enumerate(st):
+            if st[i] != c2i[ds.minor[i]]:
+                print(i,sum([len(l) for l in ds.V_INDEX[i]]),[len(l) for l in ds.V_INDEX[i]],ds.CONSENSUS[i], c2i[ds.minor[i]], ds.M[i], st[i], z1M[i], wba[i])
+                for pbw in pbweights[i]:
+                    print(pbw)
 
 
     def random_coverage_walk(self,covq):
@@ -266,9 +283,6 @@ if __name__ == "__main__":
     b,st,Tt = em.do2(NITS,  [c2i[c] for c in ds.minor])
     print("%d,%f,%f,%f,%d,%d,%d,%d,%d,%d" % (L, PI, GAMMA, MU, READLEN, NREADS, NITS, D, EPS, b) )
     assert ham(st, ds.CONSENSUS) >= EPS
-    for i,c in enumerate(st[:EPS]):
-        if st[i] != ds.CONSENSUS[i]:
-            print(i,sum([len(l) for l in ds.V_INDEX[i]]),[len(l) for l in ds.V_INDEX[i]],ds.CONSENSUS[i], c2i[ds.minor[i]], ds.M[i], st[i])
     if args.debug_plot:
         ds.debug_plot(st, Tt)
 
