@@ -93,7 +93,7 @@ class ReadAln():
                 self.nm += 1            
         return self.nm
             
-    def Pmajor(self, gamma):
+    def logPmajor(self, gamma):
         """ Calculate Pr aln given that it belongs to the major group.
     
         Args:
@@ -101,8 +101,8 @@ class ReadAln():
             consensus: consensus sequence that generates the population.
         """
 #        print(len(self.base_pos_pairs))
-        logp = self.nm*np.log(gamma) + (len(self.base_pos_pairs)-self.nm)*np.log(1-gamma)
-        return np.exp(logp)
+        logp = self.nm * np.log(gamma) + (len(self.base_pos_pairs)-self.nm)*np.log(1-gamma)
+        return logp
 
     def Pminor(self, vt):
         """ Calculate Pr aln given that it belongs to minor group.
@@ -110,33 +110,28 @@ class ReadAln():
         Args:
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
-        sumo = 0
+        logp = 0
         assert False, "TODO:FIX, SLOW"
         for pos,c in self.get_aln():
-#            if vt[pos,c] < 0.99:
-#                print(pos,c,vt[pos,c], np.exp(sumo))
-            sumo += np.log(vt[pos,c])
-        return np.exp(sumo)
+            logp += np.log(vt[pos,c])
+        res = np.exp(sumo)
+        if np.isnan(res) and sumo < -100:
+            res = 0
+        return res
 
-    def Pminor2(self, st, mu):
+    def logPminor2(self, st, mu):
         """ Calculate Pr aln given that it belongs to minor group.
 
         Args:
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
         sumo = 0
-#        print(self.z)
-#        print(st)
         for bp,c in self.base_pos_pairs:
-#            if vt[pos,c] < 0.99:
-#                print(pos,c,vt[pos,c], np.exp(sumo))
             if c == st[bp+self.pos]:
-#                print(self.pos+bp,c,st[self.pos+bp])
                 sumo += np.log(1-mu)
             else:
                 sumo += np.log(mu)
-#        print(np.exp(sumo), mu)
-        return np.exp(sumo)
+        return sumo
 
 
 if __name__ == "__main__":

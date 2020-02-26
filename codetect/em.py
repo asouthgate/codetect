@@ -65,6 +65,8 @@ class EM():
 #        print("a=",a,"b=",b,"c=",c)
 #        print("t=",[t1i,t2i])
         tp = np.array([t1i,t2i])
+        assert t1i > 0
+        assert t2i > 0
         assert sum(tp) > 0.999, sum(tp)
         return tp
  
@@ -192,7 +194,7 @@ class EM():
             if vt[sb] > 0:
                 second_best.append((vt[sb],vi,sb))
         second_best = sorted(second_best,key=lambda x:x[0])
-        for val,vi,sb in second_best[-self.EPSILON:]:
+        for val,vi,sb in second_best[-self.EPSILON*5:]:
             st[vi] = sb
         return st
 

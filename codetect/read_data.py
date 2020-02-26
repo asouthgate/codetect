@@ -21,7 +21,7 @@ class ReadData():
         self.V_INDEX = self.build_Vindex()
 #        # Subsample
         sys.stderr.write("Subsampling across the reference\n")
-        self.X = self.subsample()
+#        self.X = self.subsample()
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
@@ -37,18 +37,20 @@ class ReadData():
         self.M = self.reads2mat()
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-        self.mask_low_variance_positions()
+#        self.mask_low_variance_positions()
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
         self.V_INDEX = self.build_Vindex()
         sys.stderr.write("Recalculating matrix M\n")
         # Build M matrix
         self.M = self.reads2mat()
+        # Calculate the number of mismatches
+        [Xi.calc_nm(self.CONSENSUS) for Xi in self.X]
 
     def simple_subsample(self, N_SAMPLES=500):
         return np.random.choice(self.X, N_SAMPLES, replace=False)
 
-    def subsample(self, N_SAMPLES=1000):
+    def subsample(self, N_SAMPLES=2000):
         pos_start_arr = [[] for i in range(len(self.CONSENSUS))]
         for i,Xi in enumerate(self.X):
             pos_start_arr[Xi.pos].append(i)
@@ -92,7 +94,7 @@ class ReadData():
                 mat[ri] /= sum(mat[ri])
         return mat
 
-    def mask_low_variance_positions(self,t=0.98,mindepth=5):
+    def mask_low_variance_positions(self,t=1.0,mindepth=100):
         """ Mask uninteresting positions of the matrix. """
         def gen_index_remap(L,delinds):
             shift = [0 for i in range(L)]
@@ -105,7 +107,7 @@ class ReadData():
         for ri,row in enumerate(self.M):
             if max(row) > t or max(row) == 0:
                 delinds.add(ri)
-            if sum([len(k) for k in self.V_INDEX[ri]]) == 0:
+            if sum([len(k) for k in self.V_INDEX[ri]]) < mindepth:
                 delinds.add(ri)
         sys.stderr.write("Deleting %d positions\n"% len(delinds))
         if len(delinds) == 0:
