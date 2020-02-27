@@ -12,7 +12,7 @@ class ReadAln():
         self.pos = None
         self.base_pos_pairs = []
         self.string = ""
-        self.nm = False
+        self.nm_major = None
         self.count = 1
         self.z = None
 
@@ -65,7 +65,7 @@ class ReadAln():
         mini = self.base_pos_pairs[0][0] 
         self.pos += mini
         self.base_pos_pairs = [[bpp[0]-mini,bpp[1]] for bpp in self.base_pos_pairs]       
-        self.nm = False
+        self.nm_major = None
         return True
 
     def append_mapped_base(self, pos, c):
@@ -83,15 +83,17 @@ class ReadAln():
         nins = pos-self.pos-last_pos
         assert self.base_pos_pairs[0][0] == 0, (self.base_pos_pairs, pos, self.pos)
 
-    def calc_nm(self, consensus):
+    def calc_nm_major(self, consensus):
         # TODO: THIS IS SLOW. SHOULD BE CACHED 
         """ Calculate the number of mismatches to the reference. """
-        self.nm = 0
+        if self.nm_major != None:
+            assert False, "Refusing to recalculate constant nm"
+        self.nm_major = 0
         for bp,c in self.base_pos_pairs:
 #            if self.i2c(c) != consensus[p+self.pos]:
             if c != consensus[bp+self.pos]:
-                self.nm += 1            
-        return self.nm
+                self.nm_major += 1            
+        return self.nm_major
             
     def logPmajor(self, gamma):
         """ Calculate Pr aln given that it belongs to the major group.
@@ -101,7 +103,7 @@ class ReadAln():
             consensus: consensus sequence that generates the population.
         """
 #        print(len(self.base_pos_pairs))
-        logp = self.nm * np.log(gamma) + (len(self.base_pos_pairs)-self.nm)*np.log(1-gamma)
+        logp = self.nm_major * np.log(gamma) + (len(self.base_pos_pairs)-self.nm_major)*np.log(1-gamma)
         return logp
 
     def Pminor(self, vt):

@@ -45,6 +45,10 @@ class DataSimulator(ReadData):
         # Parse data into a ReadData object
         super(DataSimulator,self).__init__(self.X,self.CONSENSUS)
         self.N_READS = sum([Xi.count for Xi in self.X])
+        # Guarantee that the consensus has the highest
+        for ci, c in enumerate(self.CONSENSUS):
+            assert max(self.M[ci]) == self.M[ci][c]
+
 
     def get_weight_base_array(self, T):
         baseweights = np.zeros((len(self.CONSENSUS), 4))
@@ -60,80 +64,14 @@ class DataSimulator(ReadData):
                     totalTk += T[ri,1]
             baseweights[k] /= totalTk
         return baseweights
+   
+    def debug_interval(self, emObj):
+        pi = emObj.pit
+        g = emObj.gt
+        T = emObj.Tt
+        st = emObj.st
+        # Calculate est pi
 
-    def debug_plot(self,st,T):
-        """ Plot simulated data statistics for debugging.
-    
-        Args:
-            st: estimted string for minor species
-            T: T matrix from EM
-        """
-        cov0 = np.zeros(len(self.CONSENSUS))
-        cov1 = np.zeros(len(self.CONSENSUS))
-        for Xi in self.X:
-            if Xi.z == 0:
-                cov0[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
-            else:
-                assert Xi.z == 1
-                cov1[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
-        self.COV = cov0+cov1
-
-        for k in range(len(self.COV)):
-            assert self.COV[k] == sum([len(l) for l in self.V_INDEX[k]])
-        hamarr = np.zeros(len(self.CONSENSUS))
-        hamarr2 = np.zeros(len(self.CONSENSUS))
-        for i,hi in enumerate(self.CONSENSUS):
-            if self.CONSENSUS[i] != c2i[self.minor[i]]:
-                hamarr[i] = 1
-            if st[i] != self.CONSENSUS[i]:
-                hamarr2[i] = 1
-        mc0 = max(cov0)
-        hamarr *= mc0
-        hamarr2 *= mc0/2
-        nms = np.array([Xi.nm for Xi in self.X])
-        minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
-        majorhams = [ham(self.major, s) for s in self.majorpop[0]]
-        plt.bar(x=majorhams, height=self.majorpop[1])
-        plt.title("majorhams")
-        plt.show()                   
-        plt.bar(x=minorhams, height=self.minorpop[1])
-        plt.title("minorhams")
-        plt.show()
-        plt.plot(self.COVWALK)
-        plt.title("coverage_walk")
-        plt.show()
-        plt.plot(hamarr, color='red', alpha=0.5)
-        plt.plot(hamarr2, color='green', alpha=0.5)
-        plt.plot(cov0)
-        plt.plot(cov1)
-        plt.show()
-        readdists = [Xi.nm for Xi in self.X if Xi.z == 0]
-        plt.hist(readdists,bins=100)
-        readdists = [Xi.nm for Xi in self.X if Xi.z == 1]
-        plt.hist(readdists,bins=100)
-        plt.show()        
-        plt.hist([Xi.z for Xi in  self.X])
-        plt.title("True z")
-        plt.show()
-        plt.hist([r[0] for r in T])
-        plt.title("T0")
-        plt.show()
-#        print(T)
-        # Optional: calculate true pi and true gamma; 
-        self.true_pi = 0
-        self.true_gamma = []
-        for i,Xi in enumerate(self.X):
-            if Xi.z == 0:
-                self.true_pi += Xi.count
-                self.true_gamma.append(Xi.calc_nm(self.CONSENSUS)/len(Xi.base_pos_pairs))
-            else:
-                self.true_gamma.append(Xi.calc_nm([c2i[c] for c in self.minor])/len(Xi.base_pos_pairs))
-        self.true_gamma = sum(self.true_gamma)/len(self.true_gamma)
-        self.true_pi /= len(self.X)
-        assert self.true_pi > 0
-        assert len(self.V_INDEX) == len(self.M)
-        print("true pi", self.true_pi)
-        print("true gamma", self.true_gamma)
         bw = self.get_weight_base_array(T)
         for i in range(len(self.CONSENSUS)):
             if st[i] == self.CONSENSUS[i] and self.CONSENSUS[i] != c2i[self.minor[i]]:
@@ -157,6 +95,91 @@ class DataSimulator(ReadData):
                     print(pbw)
 
 
+    def debug_plot(self,emObj):
+        """ Plot simulated data statistics for debugging.
+    
+        Args:
+            st: estimted string for minor species
+            T: T matrix from EM
+        """
+        T = emObj.Tt
+        st = emObj.st
+        cov0 = np.zeros(len(self.CONSENSUS))
+        cov1 = np.zeros(len(self.CONSENSUS))
+        for Xi in self.X:
+            if Xi.z == 0:
+                cov0[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+            else:
+                assert Xi.z == 1
+                cov1[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+        self.COV = cov0+cov1
+
+        for k in range(len(self.COV)):
+            assert self.COV[k] == sum([len(l) for l in self.V_INDEX[k]])
+        hamarr = np.zeros(len(self.CONSENSUS))
+        hamarr2 = np.zeros(len(self.CONSENSUS))
+        for i,hi in enumerate(self.CONSENSUS):
+            if self.CONSENSUS[i] != c2i[self.minor[i]]:
+                hamarr[i] = len(self.V_INDEX[i][c2i[self.minor[i]]])
+            if st[i] != self.CONSENSUS[i]:
+                hamarr2[i] = len(self.V_INDEX[i][st[i]])
+        mc0 = max(cov0)
+#        hamarr *= mc0
+#        hamarr2 *= mc0
+        nms = np.array([Xi.nm_major for Xi in self.X])
+        minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
+        majorhams = [ham(self.major, s) for s in self.majorpop[0]]
+        plt.bar(x=majorhams, height=self.majorpop[1])
+        plt.title("majorhams")
+        plt.show()                   
+        plt.bar(x=minorhams, height=self.minorpop[1])
+        plt.title("minorhams")
+        plt.show()
+        plt.plot(self.COVWALK)
+        plt.title("coverage_walk")
+        plt.show()
+        estcov0 = np.zeros(len(self.CONSENSUS))
+        estcov1 = np.zeros(len(self.CONSENSUS))
+        for i,Xi in enumerate(self.X):
+            Ti = T[i]
+#            if Ti[0] > Ti[1]:
+ #               for pos,base in Xi.get_aln():
+            for pos,base in Xi.get_aln():
+                estcov0[pos] += Ti[0]
+    #            else:
+     #               for pos,base in Xi.get_aln():
+                estcov1[pos] += Ti[1]
+        plt.plot(hamarr, color='red', alpha=0.5)
+        plt.plot(hamarr2, color='blue', alpha=0.5)
+        plt.plot(cov0,color='blue')
+        plt.plot(cov1,color='orange')
+        plt.plot(estcov0,color='purple')
+        plt.plot(estcov1,color='pink')
+        plt.show()
+        inp = [int(l) for l in input("Specify interval").split()]
+        l,r = inp
+        plt.plot(hamarr[l:r], color='red', alpha=0.5)
+        plt.plot(hamarr2[l:r], color='green', alpha=0.5)
+        plt.plot(cov0[l:r],color='blue')
+        plt.plot(cov1[l:r],color='orange')
+        plt.plot(estcov0[l:r],color='purple')
+        plt.plot(estcov1[l:r],color='pink')
+        plt.show()
+        self.debug_interval(emObj)
+        readdists = [Xi.nm_major for Xi in self.X if Xi.z == 0]
+        plt.hist(readdists,bins=100)
+        readdists = [Xi.nm_major for Xi in self.X if Xi.z == 1]
+        plt.hist(readdists,bins=100)
+        plt.show()        
+        plt.hist([Xi.z for Xi in  self.X])
+        plt.title("True z")
+        plt.show()
+        plt.hist([r[0] for r in T])
+        plt.title("T0")
+        plt.show()
+#        print(T)
+
+
     def random_coverage_walk(self,covq):
         xs = np.zeros(self.GENOME_LENGTH-self.READ_LENGTH+1)
         x = 0
@@ -176,8 +199,14 @@ class DataSimulator(ReadData):
                 res[i] = random.choice([c for c in "ATCG" if res[i] != c])
         return "".join(res)
 
+    def break_sticks(self, nsticks=100):
+        props = sorted(np.random.dirichlet([1.0 for i in range(nsticks)]))
+        return props
+
     def gen_population(self, ref, mutp):
-        props = sorted(np.random.dirichlet((1.0,1.0,1.0,1.0,1.0)))
+        # Guarantee the max pop has at least 50% of the mass
+        props = self.break_sticks()
+        assert sum(props) > 0.99999999
         minorseqs = [self.mutate_perbase(ref, mutp) for i in props[:-1]]
         hams = [ham(ms, ref) for ms in minorseqs]
         return minorseqs + [ref], props
@@ -284,7 +313,7 @@ if __name__ == "__main__":
     print("%d,%f,%f,%f,%d,%d,%d,%d,%d,%d" % (L, PI, GAMMA, MU, READLEN, NREADS, NITS, D, EPS, b) )
     assert ham(st, ds.CONSENSUS) >= EPS
     if args.debug_plot:
-        ds.debug_plot(st, Tt)
+        ds.debug_plot(em)
 
     
 

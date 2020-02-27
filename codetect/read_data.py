@@ -45,7 +45,7 @@ class ReadData():
         # Build M matrix
         self.M = self.reads2mat()
         # Calculate the number of mismatches
-        [Xi.calc_nm(self.CONSENSUS) for Xi in self.X]
+        [Xi.calc_nm_major(self.CONSENSUS) for Xi in self.X]
         self.test_v_array()
 
     def test_v_array(self):

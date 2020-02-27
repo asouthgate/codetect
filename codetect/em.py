@@ -20,13 +20,15 @@ class EM():
         self.N_READS = sum([Xi.count for Xi in self.X])
         self.M = M
         self.V_INDEX = V_INDEX
+        self.MIN_COV = 3
         self.CONSENSUS = CONSENSUS
         self.MIN_THRESHOLD = 0.001
         self.EPSILON = EPS
 
-    def print_debug_info(self, Tt):
-        for i in range(20):
-            print(self.X[i].z, Tt[i])
+    def print_debug_info(self, Tt, st):
+        inds = sorted([i for i in range(len(self.X))], key = lambda i : self.X[i].pos)
+        for i in inds:
+            print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.CONSENSUS), self.X[i].cal_ham(st))
 
     def calTi_pair(self,Xi,pi,g,v):
         a = Xi.Pmajor(g)
@@ -48,6 +50,7 @@ class EM():
         b = Xi.logPminor2(st,mu)
 #        assert 0 <= a <= 1, a
 #        assert 0 <= b <= 1, b
+#        print(a,b)
         l1 = a
         l2 = b
         lw1 = np.log(pi)
@@ -55,6 +58,8 @@ class EM():
         alpha = max([l1 + lw1, l2 + lw2])
         exp1 = np.exp(l1 + lw1 - alpha)
         exp2 = np.exp(l2 + lw2 - alpha)
+        assert exp1 > 0
+        assert exp2 > 0
         c = exp1 + exp2
         t1i = exp1/c
         t2i = exp2/c
@@ -65,8 +70,8 @@ class EM():
 #        print("a=",a,"b=",b,"c=",c)
 #        print("t=",[t1i,t2i])
         tp = np.array([t1i,t2i])
-        assert t1i > 0
-        assert t2i > 0
+        assert t1i > 0, t1i
+        assert t2i > 0, t2i
         assert sum(tp) > 0.999, sum(tp)
         return tp
  
@@ -93,7 +98,9 @@ class EM():
         return min(newmu,0.5)
 
     def recalc_gamma(self,T):
-        numo = sum([T[i,0]*Xi.count*Xi.nm for i,Xi in enumerate(self.X)])
+        nms = [Xi.nm_major for Xi in self.X]
+        Ti0s = T[:,0]
+        numo = sum([T[i,0]*Xi.count*Xi.nm_major for i,Xi in enumerate(self.X)])
         deno = sum([T[i,0]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
         newgt = numo/deno
         assert 0 <= newgt <= 1,newgt
@@ -144,7 +151,7 @@ class EM():
         baseweights = self.get_weight_base_array(T)
         ststar = []
         for bi,bw in enumerate(baseweights):
-            maxi = max([j for j in range(4)], key=lambda x:bw[x])
+            maxi = max([j for j in range(4) if len(self.V_INDEX[bi][j]) > self.MIN_COV], key=lambda x:bw[x])
             if sum(bw) > 0:
                 ststar.append(maxi)
             else:
@@ -195,10 +202,11 @@ class EM():
         for vi,vt in enumerate(M):
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             sb = stups[-2]
-            if vt[sb] > 0:
+            if vt[sb] > 0 and len(self.V_INDEX[vi][sb]) > self.MIN_COV:
                 second_best.append((vt[sb],vi,sb))
         second_best = sorted(second_best,key=lambda x:x[0])
-        for val,vi,sb in second_best[-self.EPSILON*5:]:
+        for val,vi,sb in second_best:
+            print(vi,sb)
             st[vi] = sb
         return st
 
@@ -208,8 +216,6 @@ class EM():
         gt = 0.01
         mut = 0.01
         st = self.init_st(self.M)
-        
-
         # Assertions
         for row in self.M:
             for v in row:
@@ -228,18 +234,31 @@ class EM():
         assert ham(st, self.CONSENSUS) >= self.EPSILON, ham(st, self.CONSENSUS)
 
         for t in range(N_ITS):
-            sys.stderr.write("Iteration:%d,%f,%f,%f,%d\n" % (t,pit,mut,gt,ham(st,self.CONSENSUS)))
+            assert pit <= 0.999
+            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.CONSENSUS)]) + "\n")
             assert ham(st, self.CONSENSUS) >= self.EPSILON
+            if pit == 1:
+                sys.stderr.write("No coinfection detected.\n")
+                return False,st,Tt
+
             Tt = self.recalc_T2(pit,gt,st,mut)
+#            self.print_debug_info(Tt,st)
+            self.st = st
+            self.Tt = Tt
+            self.gt = gt
+            self.pit = pit
             if sum(Tt[:,1]) == 0:
                 sys.stderr.write("No coinfection detected.\n")
                 return False,st,Tt
 
             pit = self.recalc_pi(Tt)
+            pit = min(0.999, pit)
             gt = self.recalc_gamma(Tt)
+            gt = min(max(gt, 0.0001), 0.05)
             st = self.recalc_st(Tt, self.EPSILON)     
-            mut = self.recalc_mu(Tt, st)
-
+            mut = gt
+#            mut = self.recalc_mu(Tt, st)
+#            mut = min(max(mut, 0.0001), 0.05)
 
         if pit > 0.99:
             sys.stderr.write("No coinfection detected!\n")
