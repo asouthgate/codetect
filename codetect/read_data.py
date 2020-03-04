@@ -37,7 +37,7 @@ class ReadData():
         self.M = self.reads2mat()
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-#        self.mask_low_variance_positions()
+        self.VALID_INDICES = self.get_indices()
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
         self.V_INDEX = self.build_Vindex()
@@ -100,15 +100,8 @@ class ReadData():
                 mat[ri] /= sum(mat[ri])
         return mat
 
-    def mask_low_variance_positions(self,t=0.98,mindepth=20):
+    def get_indices(self,t=0.98,mindepth=20):
         """ Mask uninteresting positions of the matrix. """
-        def gen_index_remap(L,delinds):
-            shift = [0 for i in range(L)]
-            for si in range(len(shift)):
-                shift[si] = shift[si-1]
-                if si-1 in delinds:
-                    shift[si] += 1
-            return {si:si-s for si,s in enumerate(shift)}
         delinds = set()
         for ri,row in enumerate(self.M):
             if max(row) > t or max(row) == 0:
@@ -120,26 +113,9 @@ class ReadData():
             return True
         if len(delinds) == len(self.CONSENSUS):
             raise ValueError("no sites remaining")
-        newCONS = [c for ci,c in enumerate(self.CONSENSUS) if ci not in delinds]
-        Msub = [row for ri,row in enumerate(self.M) if ri not in delinds]
-        delindsl = sorted(delinds)
-        # Get rid of any empty strings after deletion
-        newX = []
-        remap = gen_index_remap(len(self.CONSENSUS),delinds)
-        for Xi in self.X:
-            #SAFEGUARD
-            prepos = Xi.pos
-            prestr = Xi.get_string()
-            prestr2 = "".join([c for ci,c in enumerate(prestr) if Xi.pos+ci not in delinds])
-            res = Xi.del_inds(delindsl,remap)
-            poststr = Xi.get_string()        
-            pushback = 0
-            for ci,c in enumerate(prestr2):
-                assert poststr[ci] == c
-            if res:
-                newX.append(Xi)
-        self.X = newX
-        self.CONSENSUS = newCONS
-        self.M = np.array(Msub)
-        self.minor = [c for ci,c in enumerate(self.minor) if ci not in delinds]
-        assert len(self.M) == len(self.CONSENSUS) 
+#        for Xi in self.X:
+#            for di in delinds:
+#                if di in Xi.map:
+#                    del Xi.map[di]            
+        return np.array([i for i in range(len(self.CONSENSUS)) if i not in delinds])
+

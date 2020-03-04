@@ -334,7 +334,7 @@ if __name__ == "__main__":
         em = EM(ds, EPS)
         ll,b,st,Tt = em.do2(NITS, random_init=False, debug=args.debug_plot)
         llo,bo,sto,Tto = em.do_one_cluster(5,  debug=args.debug_plot)
-        AIC_cluster = 6*len(ds.CONSENSUS) - 2*ll
+        AIC_cluster = 6*len(ds.VALID_INDICES) - 2*ll
         AIC_one = -2*llo 
         print("LIKELIHOODS", ll, llo)
         print("AICS", AIC_cluster, AIC_one, AIC_cluster-AIC_one)

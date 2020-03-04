@@ -136,7 +136,8 @@ class EM():
     def regularize_st(self,ststar,wmat,diff):
      # IF THE MAXIMUM STRING IS TOO CLOSE, GET THE MAXIMUM STRING SUBJECT TO CONSTRAINTS
         maxalts = []
-        for k, bw in enumerate(wmat):
+        for k in self.ds.VALID_INDS:
+            bw = wmat[k]
             # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
             if ststar[k] == self.CONSENSUS[k]:
                 maxalt = max([j for j in range(4) if j != self.CONSENSUS[k]], key=lambda x:bw[x])
@@ -161,7 +162,7 @@ class EM():
     def get_weight_base_array(self, T):
         baseweights = np.zeros((len(self.CONSENSUS), 4))
         # FIRST CALCULATE THE MOST WEIGHTY BASE FOR EACH POSITION
-        for k in range(len(self.V_INDEX)):
+        for k in self.ds.VALID_INDICES:
             v = np.zeros(4)
             totalTk = 0
             for j,rl in enumerate(self.V_INDEX[k]):
@@ -178,15 +179,14 @@ class EM():
     def recalc_st(self,T,minh):
         # BUILD THE MAXIMUM STRING
         baseweights = self.get_weight_base_array(T)
-        ststar = []
-        for bi,bw in enumerate(baseweights):
-#            print(self.CONSENSUS[bi],bi,bw)
+        ststar = [c for c in self.CONSENSUS]
+        for bi in self.ds.VALID_INDICES:
+            bw = baseweights[bi]
             maxi = max([j for j in range(4) if len(self.V_INDEX[bi][j]) > self.MIN_COV], key=lambda x:bw[x])
             if sum(bw) > 0:
-                ststar.append(maxi)
+                ststar[bi] = maxi
             else:
-                ststar.append(self.CONSENSUS[bi])
-#            print(bi,bw,self.CONSENSUS[bi],maxi)
+                ststar[bi] = self.CONSENSUS[bi]
         diff = ham(ststar,self.CONSENSUS)-minh
         if diff >= 0:
             return ststar
@@ -235,7 +235,8 @@ class EM():
     def init_st(self,M):
         st = [c for c in self.CONSENSUS]
         second_best = []
-        for vi,vt in enumerate(M):
+        for vi in self.ds.VALID_INDICES:
+            vt = M[vi]
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             sb = stups[-2]
             if vt[sb] > 0.0 and len(self.V_INDEX[vi][sb]) > self.MIN_COV:
@@ -250,8 +251,12 @@ class EM():
             st[vi] = sb
         return st
 
-    def do2(self, N_ITS, random_init=False, debug=False):
+    def check_st(self, st):
+        for i in range(len(st)):
+            if i not in self.ds.VALID_INDICES:
+                assert st[i] == self.CONSENSUS[i]
 
+    def do2(self, N_ITS, random_init=False, debug=False):
         pit = 0.5
         gt = 0.01
         mut = 0.01
@@ -277,6 +282,7 @@ class EM():
         assert ham(st, self.CONSENSUS) >= self.EPSILON, ham(st, self.CONSENSUS)
 
         for t in range(N_ITS):
+            self.check_st(st)
             assert pit <= 0.999
             sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.CONSENSUS)]) + "\n")
             assert ham(st, self.CONSENSUS) >= self.EPSILON
