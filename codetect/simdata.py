@@ -56,7 +56,7 @@ class DataSimulator(ReadData):
         self.N_READS = sum([Xi.count for Xi in self.X])
         # Guarantee that the consensus has the highest
         for ci, c in enumerate(self.CONSENSUS):
-            assert max(self.M[ci]) == self.M[ci][c]
+            assert max(self.M[ci]) == self.M[ci][c], (self.M[ci], c)
 
 
     def get_weight_base_array(self, T):
@@ -108,10 +108,12 @@ class DataSimulator(ReadData):
         cov1 = np.zeros(len(self.CONSENSUS))
         for Xi in self.X:
             if Xi.z == 0:
-                cov0[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+                for p,b in Xi.get_aln():
+                    cov0[p] += 1
             else:
                 assert Xi.z == 1
-                cov1[Xi.pos:Xi.pos+len(Xi.base_pos_pairs)] += 1
+                for p,b in Xi.get_aln():
+                    cov1[p] += 1
         self.COV = cov0+cov1
 
         estcov0 = np.zeros(len(self.CONSENSUS))

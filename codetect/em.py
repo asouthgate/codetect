@@ -21,7 +21,7 @@ class EM():
         self.N_READS = sum([Xi.count for Xi in self.X])
         self.M = ds.M
         self.V_INDEX = ds.V_INDEX
-        self.MIN_COV = 3
+        self.MIN_COV = 0
         self.CONSENSUS = ds.CONSENSUS
         self.MIN_THRESHOLD = 0.001
         self.MIN_FREQ = 0.03
@@ -118,7 +118,7 @@ class EM():
 
     def recalc_mu(self,T, S):
         numo = sum([T[i,1]*Xi.count*Xi.cal_ham(S) for i,Xi in enumerate(self.X)])
-        deno = sum([T[i,1]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
+        deno = sum([T[i,1]*Xi.count*len(Xi.get_aln()) for i,Xi in enumerate(self.X)])
         assert deno > 0
         newmu = numo/deno
         assert 0 <= newmu <= 1,newmu
@@ -128,7 +128,7 @@ class EM():
         nms = [Xi.nm_major for Xi in self.X]
         Ti0s = T[:,0]
         numo = sum([T[i,0]*Xi.count*Xi.nm_major for i,Xi in enumerate(self.X)])
-        deno = sum([T[i,0]*Xi.count*len(Xi.base_pos_pairs) for i,Xi in enumerate(self.X)])
+        deno = sum([T[i,0]*Xi.count*len(Xi.get_aln()) for i,Xi in enumerate(self.X)])
         newgt = numo/deno
         assert 0 <= newgt <= 1,newgt
         return newgt
@@ -167,8 +167,9 @@ class EM():
             for j,rl in enumerate(self.V_INDEX[k]):
                 for ri in rl:
                     Xri = self.X[ri]
-                    rib = Xri.base_pos_pairs[k-Xri.pos][1]
-                    baseweights[k,rib] += T[ri,1]
+                    assert k in Xri.map, (k,Xri.map)
+                    assert j == Xri.map[k]
+                    baseweights[k,j] += T[ri,1]
                     totalTk += T[ri,1]
             if totalTk > 0:
                 baseweights[k] /= totalTk
@@ -284,7 +285,7 @@ class EM():
                 return False,st,Tt
 
             Tt = self.recalc_T2(pit,gt,st,mut)
-            if debug_plot:
+            if debug:
                 self.ds.plot_genome(Tt,st)
 #            self.print_debug_info(Tt,st)
             self.st = st
@@ -304,7 +305,7 @@ class EM():
             mut = self.recalc_mu(Tt, st)
 #            mut = min(max(mut, 0.0001), 0.05)
 
-        if debug_plot:
+        if debug:
             self.ds.plot_genome(Tt,st)
 
         if pit > 0.99:

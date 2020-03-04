@@ -10,61 +10,64 @@ class ReadAln():
     def __init__(self,name):
         self.name = name
         self.pos = None
-        self.base_pos_pairs = []
+#        self.base_pos_pairs = []
+        self.map = {}
         self.string = ""
         self.nm_major = None
         self.count = 1
         self.z = None
+        self.aln = None
 
     def __repr__(self):
         s = ""
         prevpos = 0
-        for pos,base in self.base_pos_pairs:
+        for pos, base in self.get_aln():
             diff = pos-prevpos
             if diff > 1:
                 s += "-"*(diff-1)
             s += self.i2c(base)
             prevpos = pos
-        return "ReadAln@pos=%d@count=%d@str=%s" % (self.pos,self.count,s)
+        return "ReadAln@pos=%d@count=%d@str=%s" % (self.get_aln()[0][0],self.count,s)
 
     def get_string(self):
-        return "".join([self.i2c(p[1]) for p in self.base_pos_pairs])
+        return "".join([self.i2c(b) for p,b in self.get_aln()])
 
     def cal_ham(self,S): 
         # DEPRECIATED, SOMEHOW
         h = 0
-        for p,b in self.base_pos_pairs:
-            if b != S[self.pos+p]:
+        for p,b in self.get_aln():
+            if b != S[p]:
                 h += 1
         return h
 
     def get_aln(self):
-        return [[p[0]+self.pos,p[1]] for p in self.base_pos_pairs]
-
+        if self.aln != None:
+            return self.aln
+        else:
+            aln = [(p,b) for p,b in sorted(self.map.items(), key = lambda x:x[0])]
+            return aln
+ 
     def i2c(self,i):
         return list("ACGT")[i]
 
     def c2i(self,c):
         return {"A":0, "C":1, "G":2, "T":3}[c]
 
-    def del_inds(self, delinds, new_index_map):
+    def del_inds(self, delinds):
         """ Remove all bases mapping to positions in inds, and shift indices accordingly
             
         Args:
             inds: indices of deleted bases
-            shiftmap: mapping old positions to new ones
         """
-        # Delete specified positions
-        self.base_pos_pairs = [bpp for bpp in self.base_pos_pairs if bpp[0]+self.pos not in delinds]        
-        # Remap other positions
-        self.base_pos_pairs = [[new_index_map[bpp[0]+self.pos]-self.pos,bpp[1]] for bpp in self.base_pos_pairs]
-        # Shift the position back to zero-first base mapping
-        if len(self.base_pos_pairs) == 0:
+        assert False, "we don't delete indices currently"
+        for di in delinds:
+            if di in self.map:
+                del self.map[di]
+
+        if len(self.map) == 0:
             self.pos = None
             return False
-        mini = self.base_pos_pairs[0][0] 
-        self.pos += mini
-        self.base_pos_pairs = [[bpp[0]-mini,bpp[1]] for bpp in self.base_pos_pairs]       
+
         self.nm_major = None
         return True
 
@@ -73,15 +76,9 @@ class ReadAln():
 
         Args:
             pos: position in reference.
-            c: base that mapps at position pos (encoded as {0,1,2,3}).
+            c: base that maps at position pos (encoded as {0,1,2,3}).
         """
-        assert c in [0,1,2,3]
-        if self.pos == None:
-            self.pos = pos
-        self.base_pos_pairs.append([pos-self.pos,c])
-        last_pos = self.base_pos_pairs[-1][0]
-        nins = pos-self.pos-last_pos
-        assert self.base_pos_pairs[0][0] == 0, (self.base_pos_pairs, pos, self.pos)
+        self.map[pos] = c
 
     def calc_nm_major(self, consensus):
         # TODO: THIS IS SLOW. SHOULD BE CACHED 
@@ -89,9 +86,9 @@ class ReadAln():
         if self.nm_major != None:
             assert False, "Refusing to recalculate constant nm"
         self.nm_major = 0
-        for bp,c in self.base_pos_pairs:
+        for bp,c in self.get_aln():
 #            if self.i2c(c) != consensus[p+self.pos]:
-            if c != consensus[bp+self.pos]:
+            if c != consensus[bp]:
                 self.nm_major += 1            
         return self.nm_major
             
@@ -103,7 +100,7 @@ class ReadAln():
             consensus: consensus sequence that generates the population.
         """
 #        print(len(self.base_pos_pairs))
-        logp = self.nm_major * np.log(gamma) + (len(self.base_pos_pairs)-self.nm_major)*np.log(1-gamma)
+        logp = self.nm_major * np.log(gamma) + (len(self.map)-self.nm_major)*np.log(1-gamma)
         return logp
 
     def Pminor(self, vt):
@@ -128,8 +125,8 @@ class ReadAln():
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
         sumo = 0
-        for bp,c in self.base_pos_pairs:
-            if c == st[bp+self.pos]:
+        for bp,c in self.get_aln():
+            if c == st[bp]:
                 sumo += np.log(1-mu)
             else:
                 sumo += np.log(mu)
