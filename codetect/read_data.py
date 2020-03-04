@@ -37,7 +37,7 @@ class ReadData():
         self.M = self.reads2mat()
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-        self.mask_low_variance_positions()
+#        self.mask_low_variance_positions()
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
         self.V_INDEX = self.build_Vindex()
@@ -100,7 +100,7 @@ class ReadData():
                 mat[ri] /= sum(mat[ri])
         return mat
 
-    def mask_low_variance_positions(self,t=1.0,mindepth=20):
+    def mask_low_variance_positions(self,t=0.98,mindepth=20):
         """ Mask uninteresting positions of the matrix. """
         def gen_index_remap(L,delinds):
             shift = [0 for i in range(L)]

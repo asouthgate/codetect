@@ -15,15 +15,37 @@ def ham(s1, s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
 
 class EM():
-    def __init__(self, X, M, V_INDEX, CONSENSUS, EPS):
-        self.X = X
+    def __init__(self, ds, EPS):
+        self.ds = ds
+        self.X = ds.X
         self.N_READS = sum([Xi.count for Xi in self.X])
-        self.M = M
-        self.V_INDEX = V_INDEX
+        self.M = ds.M
+        self.V_INDEX = ds.V_INDEX
         self.MIN_COV = 3
-        self.CONSENSUS = CONSENSUS
+        self.CONSENSUS = ds.CONSENSUS
         self.MIN_THRESHOLD = 0.001
+        self.MIN_FREQ = 0.03
         self.EPSILON = EPS
+
+    def calc_log_likelihood(self,st,g,mu,pi):
+        # We now seek the log likelihood 
+        # sum logP(Xi|theta) = log(P(Xi|Zi=1,theta)P(Zi=1|theta) + 
+        # P(Xi | Zi=2,theta)P(Zi=2|theta))
+        # = log(P(X_i | Zi=1,theta)pi + P(Xi | Zi=2,theta)(1-pi))
+        # Do this via logsumexp
+        sumo = 0
+        for i,Xi in enumerate(self.X):
+            a = Xi.logPmajor(g)
+            b = Xi.logPminor2(st,mu)
+            l1 = a
+            l2 = b
+            lw1 = np.log(pi)
+            lw2 = np.log(1-pi)
+            exp1 = np.exp(l1 + lw1)
+            exp2 = np.exp(l2 + lw2)
+            c = exp1 + exp2
+            sumo += np.log(c)
+        return sumo
 
     def print_debug_info(self, Tt, st):
         inds = sorted([i for i in range(len(self.X))], key = lambda i : self.X[i].pos)
@@ -51,16 +73,21 @@ class EM():
 #        assert 0 <= a <= 1, a
 #        assert 0 <= b <= 1, b
 #        print(a,b)
+        # pi*e^L1 + (1-pi)e^L2 = e^(L1+logpi) + e^(L2+log(1-pi))
+        # 
         l1 = a
         l2 = b
         lw1 = np.log(pi)
         lw2 = np.log(1-pi)
-        alpha = max([l1 + lw1, l2 + lw2])
-        exp1 = np.exp(l1 + lw1 - alpha)
-        exp2 = np.exp(l2 + lw2 - alpha)
-        assert exp1 > 0
-        assert exp2 > 0
+#        alpha = max([l1 + lw1, l2 + lw2])
+        exp1 = np.exp(l1 + lw1)
+        exp2 = np.exp(l2 + lw2)
+#        exp1 = np.exp(l1 + lw1 - alpha)
+#        exp2 = np.exp(l2 + lw2 - alpha)
+#        assert exp1 > 0
+#        assert exp2 > 0
         c = exp1 + exp2
+        assert 0 < c <= 1.01,c
         t1i = exp1/c
         t2i = exp2/c
 #        c = pi*a + (1-pi)*b
@@ -70,8 +97,8 @@ class EM():
 #        print("a=",a,"b=",b,"c=",c)
 #        print("t=",[t1i,t2i])
         tp = np.array([t1i,t2i])
-        assert t1i > 0, t1i
-        assert t2i > 0, t2i
+#        assert t1i > 0, t1i
+#        assert t2i > 0, t2i
         assert sum(tp) > 0.999, sum(tp)
         return tp
  
@@ -121,11 +148,12 @@ class EM():
                     maxalts.append([k,maxalt,loss])
                     assert maxalt != self.CONSENSUS[k]
         maxalts = np.array(maxalts)
-        # Assume sorts small to high, take the last diff
-        toflip = maxalts[np.argsort(maxalts[:,2])][0:diff]
+        # Assume sorts small to high, take the last -diff, recall
+        # diff is negative
+        toflip = maxalts[np.argsort(maxalts[:,2])][0:-diff]
         for k,maxalt,loss in toflip:
             assert self.CONSENSUS[int(k)] != maxalt
-            ststar[int(k)] = maxalt
+            ststar[int(k)] = int(maxalt)
             assert ststar[int(k)] != self.CONSENSUS[int(k)]
 #            print(k,maxalt,w,wmat[int(k)])
         return ststar        
@@ -151,6 +179,7 @@ class EM():
         baseweights = self.get_weight_base_array(T)
         ststar = []
         for bi,bw in enumerate(baseweights):
+#            print(self.CONSENSUS[bi],bi,bw)
             maxi = max([j for j in range(4) if len(self.V_INDEX[bi][j]) > self.MIN_COV], key=lambda x:bw[x])
             if sum(bw) > 0:
                 ststar.append(maxi)
@@ -196,26 +225,39 @@ class EM():
             sumo += sum(alts)
         return sumo
 
+    def init_st_random(self,M):
+        st = [c for c in self.CONSENSUS]
+        for vi,vt in enumerate(M):
+            st[vi] = np.random.choice([j for j in range(4)],p=vt)
+        return st
+
     def init_st(self,M):
         st = [c for c in self.CONSENSUS]
         second_best = []
         for vi,vt in enumerate(M):
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             sb = stups[-2]
-            if vt[sb] > 0 and len(self.V_INDEX[vi][sb]) > self.MIN_COV:
+            if vt[sb] > 0.0 and len(self.V_INDEX[vi][sb]) > self.MIN_COV:
                 second_best.append((vt[sb],vi,sb))
         second_best = sorted(second_best,key=lambda x:x[0])
-        for val,vi,sb in second_best:
-            print(vi,sb)
+        c = 0
+#        for val,vi,sb in second_best[-len(self.CONSENSUS)//3:]:
+        for val,vi,sb in second_best[::-1]:
+            if c > self.EPSILON and val < self.MIN_FREQ:
+                break
+            c += 1
             st[vi] = sb
         return st
 
-    def do2(self, N_ITS, debug_minor, debug=False):
+    def do2(self, N_ITS, random_init=False, debug=False):
 
         pit = 0.5
         gt = 0.01
         mut = 0.01
-        st = self.init_st(self.M)
+        if random_init:
+            st = self.init_st_random(self.M)
+        else:
+            st = self.init_st(self.M)
         # Assertions
         for row in self.M:
             for v in row:
@@ -242,6 +284,8 @@ class EM():
                 return False,st,Tt
 
             Tt = self.recalc_T2(pit,gt,st,mut)
+            if debug_plot:
+                self.ds.plot_genome(Tt,st)
 #            self.print_debug_info(Tt,st)
             self.st = st
             self.Tt = Tt
@@ -249,20 +293,43 @@ class EM():
             self.pit = pit
             if sum(Tt[:,1]) == 0:
                 sys.stderr.write("No coinfection detected.\n")
-                return False,st,Tt
+                return self.calc_log_likelihood(st,gt,mut,pit), False,st,Tt
 
             pit = self.recalc_pi(Tt)
-            pit = min(0.999, pit)
+            pit = min(0.98, pit)
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
             st = self.recalc_st(Tt, self.EPSILON)     
-            mut = gt
-#            mut = self.recalc_mu(Tt, st)
+#            mut = gt
+            mut = self.recalc_mu(Tt, st)
 #            mut = min(max(mut, 0.0001), 0.05)
+
+        if debug_plot:
+            self.ds.plot_genome(Tt,st)
 
         if pit > 0.99:
             sys.stderr.write("No coinfection detected!\n")
-            return False, st, Tt
+            return self.calc_log_likelihood(st,gt,mut,pit), False, st, Tt
         
         sys.stderr.write("Coinfection detected!\n")
-        return True, st, Tt
+        return self.calc_log_likelihood(st,gt,mut,pit),True, st, Tt
+
+        props = sorted(np.random.dirichlet((1.0,1.0,1.0,1.0,1.0)))
+        props = [p/2 for p in props]
+        props[-1] += 0.5
+
+    def do_one_cluster(self, N_ITS, debug=False):
+        pit = 0.5
+        gt = 0.01
+        mut = gt
+        st = self.CONSENSUS
+        for t in range(N_ITS):
+            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.CONSENSUS)]) + "\n")
+            Tt = self.recalc_T2(pit,gt,st,mut)
+            gt = self.recalc_gamma(Tt)
+            gt = min(max(gt, 0.0001), 0.05)
+            mut = gt
+        if debug:
+            self.ds.plot_genome(Tt,st)       
+        sys.stderr.write("Coinfection detected!\n")
+        return self.calc_log_likelihood(st,gt,mut,pit),True, st, Tt
