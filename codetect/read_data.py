@@ -47,6 +47,8 @@ class ReadData():
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self.CONSENSUS) for Xi in self.X]
         self.test_v_array()
+        # Recompute consensus to be actual consensus
+        self.CONSENSUS = [np.argmax(v) for v in self.M]
 
     def test_v_array(self):
         for i,Xi in enumerate(self.X):
@@ -100,7 +102,7 @@ class ReadData():
                 mat[ri] /= sum(mat[ri])
         return mat
 
-    def get_indices(self,t=0.98,mindepth=20):
+    def get_indices(self,t=0.97,mindepth=20):
         """ Mask uninteresting positions of the matrix. """
         delinds = set()
         for ri,row in enumerate(self.M):
@@ -114,8 +116,10 @@ class ReadData():
         if len(delinds) == len(self.CONSENSUS):
             raise ValueError("no sites remaining")
 #        for Xi in self.X:
+#            Xi.unmasked_map = {i:q for i,q in Xi.map.items()}
 #            for di in delinds:
 #                if di in Xi.map:
 #                    del Xi.map[di]            
+#                    assert di in Xi.unmasked_map
         return np.array([i for i in range(len(self.CONSENSUS)) if i not in delinds])
 

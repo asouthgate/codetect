@@ -136,7 +136,7 @@ class EM():
     def regularize_st(self,ststar,wmat,diff):
      # IF THE MAXIMUM STRING IS TOO CLOSE, GET THE MAXIMUM STRING SUBJECT TO CONSTRAINTS
         maxalts = []
-        for k in self.ds.VALID_INDS:
+        for k in self.ds.VALID_INDICES:
             bw = wmat[k]
             # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
             if ststar[k] == self.CONSENSUS[k]:

@@ -12,6 +12,7 @@ class ReadAln():
         self.pos = None
 #        self.base_pos_pairs = []
         self.map = {}
+        self.unmasked_map = {}
         self.string = ""
         self.nm_major = None
         self.count = 1

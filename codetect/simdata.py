@@ -108,11 +108,11 @@ class DataSimulator(ReadData):
         cov1 = np.zeros(len(self.CONSENSUS))
         for Xi in self.X:
             if Xi.z == 0:
-                for p,b in Xi.get_aln():
+                for p,b in Xi.map.items():
                     cov0[p] += 1
             else:
                 assert Xi.z == 1
-                for p,b in Xi.get_aln():
+                for p,b in Xi.map.items():
                     cov1[p] += 1
         self.COV = cov0+cov1
 
@@ -130,7 +130,7 @@ class DataSimulator(ReadData):
             Ti = T[i]
 #            if Ti[0] > Ti[1]:
  #               for pos,base in Xi.get_aln():
-            for pos,base in Xi.get_aln():
+            for pos,base in Xi.map.items():
                 estcov0[pos] += Ti[0]
     #            else:
      #               for pos,base in Xi.get_aln():
@@ -334,7 +334,7 @@ if __name__ == "__main__":
         em = EM(ds, EPS)
         ll,b,st,Tt = em.do2(NITS, random_init=False, debug=args.debug_plot)
         llo,bo,sto,Tto = em.do_one_cluster(5,  debug=args.debug_plot)
-        AIC_cluster = 6*len(ds.VALID_INDICES) - 2*ll
+        AIC_cluster = 2.5*len(ds.VALID_INDICES) - 2*ll
         AIC_one = -2*llo 
         print("LIKELIHOODS", ll, llo)
         print("AICS", AIC_cluster, AIC_one, AIC_cluster-AIC_one)
