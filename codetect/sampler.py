@@ -81,21 +81,22 @@ class LogLikelihoodCache():
             sumo += logsumexp([self.Lsums0[ri] + np.log(1-self.pi), self.Lsums1[ri] + np.log(self.pi)])
         return sumo             
     def cal_loglikelihood(self, X,st,i,b):
-#        if not self.initialized:
-        if True:
+        if not self.initialized:
+#        if True:
             return self.cal_full_loglikelihood(X,st)
         else:
             return self.update_loglikelihood(X,i,b)        
 
-def sample_si(X,i,st0):
+def sample_si(X,i,st0,allowed_states):
 #    print("begin sampling")
-    logpmf = np.zeros(4)
-    for b in range(4):
+    logpmf = []
+    for b in allowed_states:
 #        print("base", b)
         tmp = [c for c in st0]
         tmp[i] = b
         ll = llc.cal_loglikelihood(X,tmp,i,b)
-        logpmf[b] = ll
+        logpmf.append(ll)
+    logpmf = np.array(logpmf)
 #    print(logpmf)
     deno = logsumexp(logpmf)
 #    print(logpmf, deno)
@@ -106,15 +107,15 @@ def sample_si(X,i,st0):
 #    print("ref:", Strue[i])
 #    print()
 #    assert False
-    return np.random.choice(range(4),p=pmf)        
+    return np.random.choice(allowed_states,p=pmf)        
 
-def gibbs_sample(X,init,NITS=500):    
+def gibbs_sample(X,init,allowed,NITS=100):    
     strings = []
     st0 = [c for c in init]
     for nit in range(NITS):
         print("iteration=",nit,"currham=",ham(st0,Strue))
         for i,si in enumerate(st0):
-            newsi = sample_si(X,i,st0)
+            newsi = sample_si(X,i,st0,allowed[i])
 #            if newsi != st0[i]:
 #                print("******* NEW STATE")
 #            if i > 10:
@@ -130,22 +131,31 @@ def gen_array(strings, L):
             C[ci,c] += 1
     return C
 
-NREADS =  100
+NMAJOR = 100
+NMINOR = 100
+NREADS =  NMAJOR+NMINOR
 GENOME_LENGTH = 30
-MU = 0.2
-Strue,X = gendata(NREADS,GENOME_LENGTH,MU)
+MU = 0.45
+Strue,X1 = gendata(NMAJOR,GENOME_LENGTH,MU)
+Salt,X2 = gendata(NMINOR,GENOME_LENGTH,MU)
+X = X1 + X2
+Cog = gen_array(X, GENOME_LENGTH)
+allowed=[]
+states_per_site = 2
+for c in Cog:
+    allowed.append(np.argsort(c)[-states_per_site:])
+print(allowed)
 print(Strue)
 print(X[0])
 CONSENSUS = Strue
 llc = LogLikelihoodCache(NREADS, GENOME_LENGTH, MU, CONSENSUS, 0.5)
 randy = [random.choice([0,1,2,3]) for i in range(GENOME_LENGTH)]
 assert randy != Strue
-samps = gibbs_sample(X,randy)
+samps = gibbs_sample(X,randy,allowed)
 assert randy != Strue
-Cog = gen_array(X, GENOME_LENGTH)
 C = gen_array(samps, GENOME_LENGTH)
 
 for ci, c in enumerate(C):
-    print(ci,"realarr=",Cog[ci],"samparr=",c,"true=",Strue[ci])
+    print(ci,"realarr=",Cog[ci],"samparr=",c,"true=",Strue[ci], "salt=", Salt[j])
     
-print("total error=",sum([1 for j in range(len(Strue)) if Strue[j] != np.argmax(C[j])]))
+print("total error=",sum([1 for j in range(len(Strue)) if Salt[j] != np.argmax(C[j])]))
