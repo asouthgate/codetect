@@ -95,41 +95,80 @@ class LogLikelihoodCache():
         for ri, Li in enumerate(self.Lsums):       
             numo = self.Lsums0[ri] + np.log(1-self.pi)
             deno = self.Lsums[ri]
+#            print(numo,deno, np.exp(numo-deno))
+#            print(self.Lsums0[ri], self.Lsums1[ri])
             PZs.append(np.exp(numo - deno))
         return PZs
-    def set_mu(self,newmu):
-        self.mu = newmu
-        self.initialized = False
+    def point_estimate_pi(self):
+        probZ0s = self.cal_PZ0s()
+#        print(probZ0s, len(probZ0s))
+        newpi = sum(probZ0s)/len(probZ0s)
+        self.set_pi(newpi)
+        return newpi
+    def point_estimate_gamma(self,X):
+        probZ0s = self.cal_PZ0s()
+        spzs = sum(probZ0s)
+        numo = 0
+        for ri,r in enumerate(X):
+            numo += (probZ0s[ri] * ham(r, self.consensus))
+#            print(probZ0s[ri] * ham(r, self.consensus))
+        newgam = numo/(spzs*GENOME_LENGTH)
+#        print(numo,spzs,newgam)
+        self.set_gamma(newgam)
+        return newgam
+    def set_gamma(self,newgam):
+        self.mu = newgam
+        self.wipe_memory()
     def set_pi(self,newpi):
         self.pi = newpi
         self.wipe_memory()
-    def cal_loglikelihood(self, X,st,i=None,b=None,newpi=None):
+    def cal_loglikelihood(self, X,st,i=None,b=None,newpi=None,newgam=None):
+        if newgam != None:
+            self.set_gamma(newgam)
         if newpi != None:
             self.set_pi(newpi)
+#        self.initialized=False
         if not self.initialized:
-            print("recomputing fully")
+#            print("recomputing fully")
             return self.cal_full_loglikelihood(X,st)
         else:
             return self.update_loglikelihood(X,i,b)
 
+def mh_sample_gamma(X,st,gamma):
+    # Independence sampler
+    propgam = random.uniform(0.0,0.2)
+    u = random.uniform(0,1)
+    deno = llc.cal_loglikelihood(X,st,newgam=gamma)
+    numo = llc.cal_loglikelihood(X,st,newgam=propgam)
+#    print(numo,deno)
+#    print(pi,proppi,u,numo/deno)
+    if u <= np.exp(numo-deno):
+        #accept
+        # TODO: turn off recomputing full likelihood after!
+        return propgam
+    else:
+        #reject
+        llc.cal_loglikelihood(X,st,newgam=gamma)
+        return gamma
+
 def mh_sample_pi(X,st,pi):
     # Independence sampler
-    proppi = random.uniform(0.05,0.95)
+    proppi = random.uniform(0.01,0.99)
     u = random.uniform(0,1)
     deno = llc.L
+    assert pi == llc.pi, (pi,llc.pi)
+#    assert math.fabs(tmp-deno) < 0.000001
+#    deno = llc.L
     numo = llc.cal_loglikelihood(X,st,newpi=proppi)
-    print(pi,proppi,u,numo/deno)
+#    print(pi,proppi,u,numo/deno)
     if np.log(u) <= numo-deno:
         #accept
         # TODO: turn off recomputing full likelihood after!
         return proppi
     else:
         #reject
+        llc.set_pi(pi)
         return pi 
-
-def point_estimate_pi():
-    probZ0s = llc.cal_PZ0s()
-    return sum(probZ0s)/len(probZ0s)
 
 def gibbs_sample_si(X,i,st0,allowed_states):
 #    print("begin sampling")
@@ -138,6 +177,7 @@ def gibbs_sample_si(X,i,st0,allowed_states):
 #        print("base", b)
         tmp = [c for c in st0]
         tmp[i] = b
+        # TODO: speed up by 1/Nstates by not recomputing for the one it already is
         ll = llc.cal_loglikelihood(X,tmp,i,b)
         logpmf.append(ll)
     logpmf = np.array(logpmf)
@@ -151,15 +191,17 @@ def gibbs_sample_si(X,i,st0,allowed_states):
 #    print("ref:", Strue[i])
 #    print()
 #    assert False
-    return np.random.choice(allowed_states,p=pmf)        
-
-def sample(X,init,allowed,NITS=100):    
+    choice = np.random.choice(allowed_states,p=pmf)        
+    llc.cal_loglikelihood(X,tmp,i,choice)
+    return choice
+def sample(X,init,allowed,NITS=1000):    
     strings = []
     pis = np.array([])
     st0 = [c for c in init]
     pi = 0.5
+    gamma = MU
     for nit in range(NITS):
-        print("iteration=",nit,"currham=",ham(st0,Strue),"currpi=%f" % pi, "meanpi=%f"%np.mean(pis))
+        print("iteration=",nit,"currham=",ham(st0,Salt),"currpi=%f" % pi, "meanpi=%f"%np.mean(pis[100:]), "currgam=%f" % gamma)
         for i,si in enumerate(st0):
             newsi = gibbs_sample_si(X,i,st0,allowed[i])
 #            if newsi != st0[i]:
@@ -167,10 +209,15 @@ def sample(X,init,allowed,NITS=100):
 #            if i > 10:
 #                assert False
             st0[i] = newsi
-#        pi = mh_sample_pi(X,st0,pi)
+        pi = mh_sample_pi(X,st0,pi)
+#        pi = llc.point_estimate_pi()
+        gamma = mh_sample_gamma(X,st0,gamma)
+#        gamma = llc.point_estimate_gamma(X)
         pis = np.append(pis,pi)
-        print(point_estimate_pi())
         strings.append([c for c in st0])      
+    import matplotlib.pyplot as plt
+    plt.hist(pis[100:])
+    plt.show()
     return strings
 
 def gen_array(strings, L):
@@ -180,17 +227,17 @@ def gen_array(strings, L):
             C[ci,c] += 1
     return C
 
-NMAJOR = 200
-NMINOR = 200
+NMAJOR = 90
+NMINOR = 10
 NREADS =  NMAJOR+NMINOR
-GENOME_LENGTH = 50
-MU = 0.3
+GENOME_LENGTH = 10
+MU = 0.1
 Strue,X1 = gendata(NMAJOR,GENOME_LENGTH,MU)
 Salt,X2 = gendata(NMINOR,GENOME_LENGTH,MU)
 X = X1 + X2
 Cog = gen_array(X, GENOME_LENGTH)
 allowed=[]
-states_per_site = 4
+states_per_site = 2
 for c in Cog:
     allowed.append(np.argsort(c)[-states_per_site:])
 print(allowed)
