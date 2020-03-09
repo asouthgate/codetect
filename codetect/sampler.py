@@ -27,15 +27,21 @@ def logsumexp(logls):
     return m + np.log(sumo)        
 
 class LogLikelihoodCache():
-    def __init__(self, N, L, MU, CONSENSUS, PI):
-        self.Larr = np.zeros((2,N,L))
-        self.Lsums0 = np.zeros(N)
-        self.Lsums1 = np.zeros(N)
-        self.Lsums = np.zeros(N)    
+    def __init__(self, N, GL, MU, CONSENSUS, PI):
+        self.N = N
+        self.GL = GL
+        self.wipe_memory()
         self.mu = MU
         self.pi = PI
         self.initialized = False
         self.consensus = tuple([c for c in CONSENSUS])
+    def wipe_memory(self):
+        self.initialized = False
+        self.Larr = np.zeros((2,self.N,self.GL))
+        self.Lsums0 = np.zeros(self.N)
+        self.Lsums1 = np.zeros(self.N)
+        self.Lsums = np.zeros(self.N)    
+        self.L = None
     def getlogp(self,a,b):
         if a == b:
             return np.log(1-self.mu)
@@ -62,6 +68,7 @@ class LogLikelihoodCache():
 #            print("likelihood=",np.exp(self.Lsums[ri]), np.exp(self.Lsums0[ri])*(1-self.pi) + np.exp(self.Lsums1[ri])*self.pi)
             sumo += self.Lsums[ri]
         self.initialized = True
+        self.L = sumo
         return sumo
     def update_loglikelihood(self,X,i,b):
         sumo = 0
@@ -78,16 +85,53 @@ class LogLikelihoodCache():
             self.Lsums1[ri] -= self.Larr[1,ri,i]
             self.Larr[1,ri,i] = logp1
             self.Lsums1[ri] += logp1             
-            sumo += logsumexp([self.Lsums0[ri] + np.log(1-self.pi), self.Lsums1[ri] + np.log(self.pi)])
+            self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(1-self.pi), self.Lsums1[ri] + np.log(self.pi)])
+            sumo += self.Lsums[ri]
+        self.L = sumo
         return sumo             
-    def cal_loglikelihood(self, X,st,i,b):
+    def cal_PZ0s(self):
+        # Computes the log conditional probability for each datapoint
+        PZs = []
+        for ri, Li in enumerate(self.Lsums):       
+            numo = self.Lsums0[ri] + np.log(1-self.pi)
+            deno = self.Lsums[ri]
+            PZs.append(np.exp(numo - deno))
+        return PZs
+    def set_mu(self,newmu):
+        self.mu = newmu
+        self.initialized = False
+    def set_pi(self,newpi):
+        self.pi = newpi
+        self.wipe_memory()
+    def cal_loglikelihood(self, X,st,i=None,b=None,newpi=None):
+        if newpi != None:
+            self.set_pi(newpi)
         if not self.initialized:
-#        if True:
+            print("recomputing fully")
             return self.cal_full_loglikelihood(X,st)
         else:
-            return self.update_loglikelihood(X,i,b)        
+            return self.update_loglikelihood(X,i,b)
 
-def sample_si(X,i,st0,allowed_states):
+def mh_sample_pi(X,st,pi):
+    # Independence sampler
+    proppi = random.uniform(0.05,0.95)
+    u = random.uniform(0,1)
+    deno = llc.L
+    numo = llc.cal_loglikelihood(X,st,newpi=proppi)
+    print(pi,proppi,u,numo/deno)
+    if np.log(u) <= numo-deno:
+        #accept
+        # TODO: turn off recomputing full likelihood after!
+        return proppi
+    else:
+        #reject
+        return pi 
+
+def point_estimate_pi():
+    probZ0s = llc.cal_PZ0s()
+    return sum(probZ0s)/len(probZ0s)
+
+def gibbs_sample_si(X,i,st0,allowed_states):
 #    print("begin sampling")
     logpmf = []
     for b in allowed_states:
@@ -109,18 +153,23 @@ def sample_si(X,i,st0,allowed_states):
 #    assert False
     return np.random.choice(allowed_states,p=pmf)        
 
-def gibbs_sample(X,init,allowed,NITS=100):    
+def sample(X,init,allowed,NITS=100):    
     strings = []
+    pis = np.array([])
     st0 = [c for c in init]
+    pi = 0.5
     for nit in range(NITS):
-        print("iteration=",nit,"currham=",ham(st0,Strue))
+        print("iteration=",nit,"currham=",ham(st0,Strue),"currpi=%f" % pi, "meanpi=%f"%np.mean(pis))
         for i,si in enumerate(st0):
-            newsi = sample_si(X,i,st0,allowed[i])
+            newsi = gibbs_sample_si(X,i,st0,allowed[i])
 #            if newsi != st0[i]:
 #                print("******* NEW STATE")
 #            if i > 10:
 #                assert False
             st0[i] = newsi
+#        pi = mh_sample_pi(X,st0,pi)
+        pis = np.append(pis,pi)
+        print(point_estimate_pi())
         strings.append([c for c in st0])      
     return strings
 
@@ -131,17 +180,17 @@ def gen_array(strings, L):
             C[ci,c] += 1
     return C
 
-NMAJOR = 100
-NMINOR = 100
+NMAJOR = 200
+NMINOR = 200
 NREADS =  NMAJOR+NMINOR
-GENOME_LENGTH = 30
-MU = 0.45
+GENOME_LENGTH = 50
+MU = 0.3
 Strue,X1 = gendata(NMAJOR,GENOME_LENGTH,MU)
 Salt,X2 = gendata(NMINOR,GENOME_LENGTH,MU)
 X = X1 + X2
 Cog = gen_array(X, GENOME_LENGTH)
 allowed=[]
-states_per_site = 2
+states_per_site = 4
 for c in Cog:
     allowed.append(np.argsort(c)[-states_per_site:])
 print(allowed)
@@ -151,11 +200,15 @@ CONSENSUS = Strue
 llc = LogLikelihoodCache(NREADS, GENOME_LENGTH, MU, CONSENSUS, 0.5)
 randy = [random.choice([0,1,2,3]) for i in range(GENOME_LENGTH)]
 assert randy != Strue
-samps = gibbs_sample(X,randy,allowed)
+samps = sample(X,randy,allowed)
 assert randy != Strue
 C = gen_array(samps, GENOME_LENGTH)
+SaltC = gen_array(X2, GENOME_LENGTH)
 
 for ci, c in enumerate(C):
-    print(ci,"realarr=",Cog[ci],"samparr=",c,"true=",Strue[ci], "salt=", Salt[j])
+    errstr = "ERROR"
+    if Salt[ci] == np.argmax(c):
+        errstr = ""
+    print(ci,"saltarr=",SaltC[ci],"samparr=",c,"true=",Strue[ci], "salt=", Salt[ci], errstr)
     
 print("total error=",sum([1 for j in range(len(Strue)) if Salt[j] != np.argmax(C[j])]))
