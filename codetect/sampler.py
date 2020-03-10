@@ -1,9 +1,21 @@
 import random
 import numpy as np
 import math
+from scipy.special import beta
+import matplotlib.pyplot as plt
+from aln import *
 
 def ham(s1,s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
+
+def X2Aln(X):
+    alns = []
+    for i,xi in enumerate(X):
+        aln = ReadAln(i)
+        for j in range(len(xi)):
+            aln.append_mapped_base(j,xi[j])
+        alns.append(aln)
+    return alns
 
 def mut(s, mu):
     s2 = [c for c in s]
@@ -27,11 +39,12 @@ def logsumexp(logls):
     return m + np.log(sumo)        
 
 class LogLikelihoodCache():
-    def __init__(self, N, GL, MU, CONSENSUS, PI):
+    def __init__(self, N, GL, GAMMA, MU, CONSENSUS, PI):
         self.N = N
         self.GL = GL
         self.wipe_memory()
         self.mu = MU
+        self.gamma = GAMMA
         self.pi = PI
         self.initialized = False
         self.consensus = tuple([c for c in CONSENSUS])
@@ -42,15 +55,19 @@ class LogLikelihoodCache():
         self.Lsums1 = np.zeros(self.N)
         self.Lsums = np.zeros(self.N)    
         self.L = None
-    def getlogp(self,a,b):
+    def getlogp(self,ci,a,b):
+        q = self.gamma
+        if ci == 1:
+            q = self.mu
         if a == b:
-            return np.log(1-self.mu)
+            return np.log(1-q)
         else:
-            return np.log(self.mu)
+            return np.log(q)
+
     def cal_read_loglikelihood(self, ri, read, st, ci):
         sumo = 0
-        for j in range(len(read)):
-            logp = self.getlogp(read[j],st[j])
+        for j in range(len(self.consensus)):
+            logp = self.getlogp(ci,read.map[j],st[j])
             self.Larr[ci,ri,j] = logp
             sumo += self.Larr[ci,ri,j]
         return sumo
@@ -76,12 +93,12 @@ class LogLikelihoodCache():
         for ri, read in enumerate(X):
             #** TODO: likelihood should not be recomputed for both here unless gamma has changed
             # 2X slower to do so
-            logp0 = self.getlogp(read[i],self.consensus[i])
+            logp0 = self.getlogp(0,read.map[i],self.consensus[i])
             self.Lsums0[ri] -= self.Larr[0,ri,i]
             self.Larr[0,ri,i] = logp0
             self.Lsums0[ri] += logp0             
             #*****
-            logp1 = self.getlogp(read[i],b)
+            logp1 = self.getlogp(1,read.map[i],b)
             self.Lsums1[ri] -= self.Larr[1,ri,i]
             self.Larr[1,ri,i] = logp1
             self.Lsums1[ri] += logp1             
@@ -116,13 +133,18 @@ class LogLikelihoodCache():
 #        print(numo,spzs,newgam)
         self.set_gamma(newgam)
         return newgam
+    def set_mu(self,newmu):
+        self.mu = newmu
+        self.wipe_memory()
     def set_gamma(self,newgam):
-        self.mu = newgam
+        self.gamma = newgam
         self.wipe_memory()
     def set_pi(self,newpi):
         self.pi = newpi
         self.wipe_memory()
-    def cal_loglikelihood(self, X,st,i=None,b=None,newpi=None,newgam=None):
+    def cal_loglikelihood(self, X,st,i=None,b=None,newpi=None,newgam=None,newmu=None):
+        if newmu != None:
+            self.set_mu(newmu)
         if newgam != None:
             self.set_gamma(newgam)
         if newpi != None:
@@ -134,9 +156,27 @@ class LogLikelihoodCache():
         else:
             return self.update_loglikelihood(X,i,b)
 
+def mh_sample_mu(X,st,mu):
+    # Independence sampler
+    propmu = random.uniform(0.0,0.1)
+    u = random.uniform(0,1)
+    deno = llc.cal_loglikelihood(X,st,newgam=mu)
+    numo = llc.cal_loglikelihood(X,st,newmu=propmu)
+#    print(numo,deno)
+#    print(pi,proppi,u,numo/deno)
+    if u <= np.exp(numo-deno):
+        #accept
+        # TODO: turn off recomputing full likelihood after!
+        return propmu
+    else:
+        #reject
+        llc.cal_loglikelihood(X,st,newmu=mu)
+        return mu
+
+
 def mh_sample_gamma(X,st,gamma):
     # Independence sampler
-    propgam = random.uniform(0.0,0.2)
+    propgam = random.uniform(0.0,0.3)
     u = random.uniform(0,1)
     deno = llc.cal_loglikelihood(X,st,newgam=gamma)
     numo = llc.cal_loglikelihood(X,st,newgam=propgam)
@@ -151,9 +191,99 @@ def mh_sample_gamma(X,st,gamma):
         llc.cal_loglikelihood(X,st,newgam=gamma)
         return gamma
 
+def logbetapdf(x,a,b):
+#    print(x,1-x,a,b)
+    assert a > 1
+    assert b > 1
+    return (a-1)*np.log(x) + (b-1)*np.log(1-x) - np.log(beta(a+1,b+1))
+
+def mh_sample_normal(X,st,pi,gamma,mu,sigma_pi=0.03,sigma_gamma=0.015,sigma_mu=0.01):
+    u = random.uniform(0,1)
+    proppi = np.random.normal(pi,sigma_pi)
+    propgamma = np.random.normal(gamma,sigma_gamma)
+    propmu = np.random.normal(mu,sigma_mu)
+    deno = llc.L
+    assert pi == llc.pi, (pi,llc.pi)
+    assert gamma == llc.gamma
+    assert mu == llc.mu
+#    print("proposing:",proppi,propgamma,propmu)
+    numo = llc.cal_loglikelihood(X,st,newpi=proppi,newgam=propgamma,newmu=propmu)
+#    print(numo,deno)
+#    print(np.exp(numo),np.exp(deno))
+    if 0 <= proppi <= 1 and 0 <= propgamma <= GAMMA_UPPER and 0 <= propmu <= MU_UPPER:
+        if np.log(u) <= numo-deno:
+            return proppi,propgamma,propmu
+#    else:
+#        print("out of bounds")
+    #else reject
+#    print("reject")
+#    print("rejecting",proppi,propgamma,propmu)
+    llc.set_pi(pi)
+    llc.set_gamma(gamma)
+    llc.set_mu(mu)
+    llc.cal_loglikelihood(X,st,newpi=pi,newgam=gamma,newmu=mu)
+    return pi,gamma,mu
+
+
+def mh_sample_three(X,st,pi,gamma,mu,MF=100):
+    # 3d Beta proposal
+    proppi = np.random.beta(pi*MF,(1-pi)*MF)
+    propgamma = np.random.beta(gamma*MF,(1-gamma)*MF)
+    propmu = np.random.beta(mu*MF,(1-mu)*MF)
+    # TODO: fast acceptance ratio by working out the ratio
+    xs = [i/1000 for i in range(1,1000)]
+    proppisy = [np.exp(logbetapdf(i,pi*MF,(1-pi)*MF)) for i in xs]
+    pisy = [np.exp(logbetapdf(i,proppi*MF,(1-proppi)*MF)) for i in xs]
+    plt.scatter(x=xs,y=proppisy,color='blue',alpha=0.5)
+    plt.scatter(x=xs,y=pisy,color='purple',alpha=0.5)
+    plt.show()
+    propgamy = [np.exp(logbetapdf(i,gamma*MF,(1-gamma)*MF)) for i in xs]
+    gamy = [np.exp(logbetapdf(i,propgamma*MF,(1-propgamma)*MF)) for i in xs]
+    plt.scatter(x=xs,y=propgamy,color='green',alpha=0.5)
+    plt.scatter(x=xs,y=gamy,color='brown',alpha=0.5)
+    plt.show()
+    propmusy = [np.exp(logbetapdf(i,mu*MF,(1-mu)*MF)) for i in xs]
+    musy = [np.exp(logbetapdf(i,propmu*MF,(1-propmu)*MF)) for i in xs]
+    plt.scatter(x=xs,y=propmusy,color='red',alpha=0.5)
+    plt.scatter(x=xs,y=musy,color='pink',alpha=0.5)
+    plt.show()
+    plt.show()
+    assert proppi > 0, proppi
+    assert propgamma > 0, propgamma
+    assert propmu > 0, propmu
+    # numo2 = log g(x | x')
+    numo2  = logbetapdf(pi,proppi*MF,(1-proppi)*MF)
+    numo2 += logbetapdf(mu,propmu*MF,(1-propmu)*MF)
+    numo2 += logbetapdf(gamma,propgamma*MF,(1-propgamma)*MF)
+    
+    deno2  = logbetapdf(proppi,pi*MF,(1-pi)*MF)
+    deno2 += logbetapdf(propmu,mu*MF,(1-mu)*MF)
+    deno2 += logbetapdf(propgamma,gamma*MF,(1-gamma)*MF)
+    u = random.uniform(0,1)
+    deno = llc.L
+    assert pi == llc.pi, (pi,llc.pi)
+    assert gamma == llc.gamma
+    assert mu == llc.mu
+#    assert math.fabs(tmp-deno) < 0.000001
+#    deno = llc.L
+    numo = llc.cal_loglikelihood(X,st,newpi=proppi,newgam=propgamma,newmu=propmu)
+    print(numo,deno)
+    print(numo2,deno2)
+    print()
+#    print(pi,proppi,u,numo/deno)
+    if np.log(u) <= numo-deno+numo2-deno2:
+        return proppi,propgamma,propmu
+    else:
+        #reject
+        print("reject")
+        llc.set_pi(pi)
+        llc.set_gamma(gamma)
+        llc.set_mu(mu)
+        return pi,gamma,mu
+
 def mh_sample_pi(X,st,pi):
     # Independence sampler
-    proppi = random.uniform(0.01,0.99)
+    proppi = random.uniform(0.0,0.3)
     u = random.uniform(0,1)
     deno = llc.L
     assert pi == llc.pi, (pi,llc.pi)
@@ -194,14 +324,15 @@ def gibbs_sample_si(X,i,st0,allowed_states):
     choice = np.random.choice(allowed_states,p=pmf)        
     llc.cal_loglikelihood(X,tmp,i,choice)
     return choice
-def sample(X,init,allowed,NITS=1000):    
+def sample(X,init,allowed,NITS=500):    
     strings = []
-    pis = np.array([])
+    params = []
     st0 = [c for c in init]
-    pi = 0.5
-    gamma = MU
+    pi = llc.pi
+    gamma = llc.gamma
+    mu = llc.mu
     for nit in range(NITS):
-        print("iteration=",nit,"currham=",ham(st0,Salt),"currpi=%f" % pi, "meanpi=%f"%np.mean(pis[100:]), "currgam=%f" % gamma)
+        print("iteration=",nit,"currham=",ham(st0,Salt),"currpi=%f" % pi, "currgam=%f" % gamma, "currmu=%f" % mu)
         for i,si in enumerate(st0):
             newsi = gibbs_sample_si(X,i,st0,allowed[i])
 #            if newsi != st0[i]:
@@ -209,32 +340,45 @@ def sample(X,init,allowed,NITS=1000):
 #            if i > 10:
 #                assert False
             st0[i] = newsi
-        pi = mh_sample_pi(X,st0,pi)
+#        pi = mh_sample_pi(X,st0,pi)
 #        pi = llc.point_estimate_pi()
-        gamma = mh_sample_gamma(X,st0,gamma)
+#        gamma = mh_sample_gamma(X,st0,gamma)
+#        mu = mh_sample_mu(X,st0,mu)
 #        gamma = llc.point_estimate_gamma(X)
-        pis = np.append(pis,pi)
+        for k in range(10):
+            pi,gamma,mu = mh_sample_normal(X,st0,pi,gamma,mu)
+            params.append([pi,gamma,mu])
         strings.append([c for c in st0])      
-    import matplotlib.pyplot as plt
-    plt.hist(pis[100:])
-    plt.show()
+#    plt.hist(params[100:,0])
+#    print(np.mean(params[100:,0]))
+#    plt.show()
+#    plt.hist(params[100:,1])
+#    print(np.mean(params[100:,1]))
+#    plt.show()
+#    plt.hist(params[100:,2])
+#    print(np.mean(params[100:,2]))
+#    plt.show()
     return strings
 
 def gen_array(strings, L):
     C = np.zeros((L,4))
     for s in strings:
-        for ci,c in enumerate(s):
+        for ci,c in s.get_aln():
             C[ci,c] += 1
     return C
 
-NMAJOR = 90
+NMAJOR = 40
 NMINOR = 10
 NREADS =  NMAJOR+NMINOR
-GENOME_LENGTH = 10
-MU = 0.1
-Strue,X1 = gendata(NMAJOR,GENOME_LENGTH,MU)
+GENOME_LENGTH = 20
+GAMMA = 0.33
+MU = 0.3
+MU_UPPER = 0.4
+GAMMA_UPPER = 0.4
+Strue,X1 = gendata(NMAJOR,GENOME_LENGTH,GAMMA)
 Salt,X2 = gendata(NMINOR,GENOME_LENGTH,MU)
 X = X1 + X2
+X = X2Aln(X)
 Cog = gen_array(X, GENOME_LENGTH)
 allowed=[]
 states_per_site = 2
@@ -244,7 +388,7 @@ print(allowed)
 print(Strue)
 print(X[0])
 CONSENSUS = Strue
-llc = LogLikelihoodCache(NREADS, GENOME_LENGTH, MU, CONSENSUS, 0.5)
+llc = LogLikelihoodCache(NREADS, GENOME_LENGTH, random.uniform(0,GAMMA_UPPER), random.uniform(0,MU_UPPER), CONSENSUS, random.uniform(0,1))
 randy = [random.choice([0,1,2,3]) for i in range(GENOME_LENGTH)]
 assert randy != Strue
 samps = sample(X,randy,allowed)
