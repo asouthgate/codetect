@@ -37,20 +37,18 @@ class ReadData():
         sys.stderr.write("Generating starting matrix M\n")
         # Build M matrix
         self.M = self.reads2mat()
-        # Mask low variance positions
-        sys.stderr.write("Masking low variance positions\n")
-        self.VALID_INDICES = self.get_indices()
-        # Rebuild V index
-        sys.stderr.write("Rebuilding V index\n")
-        self.V_INDEX = self.build_Vindex()
-        sys.stderr.write("Recalculating matrix M\n")
-        # Build M matrix
-        self.M = self.reads2mat()
         # Recompute consensus to be actual consensus
         self._CONSENSUS = [np.argmax(v) for v in self.M]
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
+
+    def filter(self):
+        """ Mask low-variance positions. """
+        # Mask low variance positions
+        sys.stderr.write("Masking low variance positions\n")
+        self.VALID_INDICES = self.get_indices()
+        self.test_v_array() 
 
     def get_consensus(self):
         return self._CONSENSUS

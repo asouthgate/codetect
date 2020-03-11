@@ -30,6 +30,9 @@ class ReadAln():
             prevpos = pos
         return "ReadAln@pos=%d@count=%d@str=%s" % (self.get_aln()[0][0],self.count,s)
 
+    def get_length(self):
+        return len(self.map)
+
     def get_string(self):
         return "".join([self.i2c(b) for p,b in self.get_aln()])
 
