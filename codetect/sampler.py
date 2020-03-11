@@ -77,7 +77,7 @@ class LogLikelihoodCache():
         for ri,read in enumerate(X):
             self.Lsums0[ri] = self.cal_read_loglikelihood(ri,read,self.consensus,0)
             self.Lsums1[ri] = self.cal_read_loglikelihood(ri,read,st,1)
-            self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(1-self.pi), self.Lsums1[ri] + np.log(self.pi)])
+            self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(self.pi), self.Lsums1[ri] + np.log(1-self.pi)])
 #            print("read=",ri)
 #            print("pi=",self.pi)
 #            print("hams=",ham(self.consensus,st), ham(read, self.consensus), ham(read,st))
@@ -103,7 +103,7 @@ class LogLikelihoodCache():
             self.Lsums1[ri] -= self.Larr[1,ri,i]
             self.Larr[1,ri,i] = logp1
             self.Lsums1[ri] += logp1             
-            self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(1-self.pi), self.Lsums1[ri] + np.log(self.pi)])
+            self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(self.pi), self.Lsums1[ri] + np.log(1-self.pi)])
             sumo += self.Lsums[ri]*X[ri].count
         self.L = sumo
         return sumo             
@@ -111,7 +111,7 @@ class LogLikelihoodCache():
         # Computes the log conditional probability for each datapoint
         PZs = []
         for ri, Li in enumerate(self.Lsums):       
-            numo = self.Lsums0[ri] + np.log(1-self.pi)
+            numo = self.Lsums0[ri] + np.log(self.pi)
             deno = self.Lsums[ri]
 #            print(numo,deno, np.exp(numo-deno))
 #            print(self.Lsums0[ri], self.Lsums1[ri])
@@ -128,7 +128,7 @@ class LogLikelihoodCache():
         spzs = sum(probZ0s)
         numo = 0
         for ri,r in enumerate(X):
-            numo += (probZ0s[ri] * ham(r, self.consensus))
+            numo += (probZ0s[ri] * r.cal_ham(self.consensus))
 #            print(probZ0s[ri] * ham(r, self.consensus))
         newgam = numo/(spzs*GENOME_LENGTH)
 #        print(numo,spzs,newgam)
@@ -205,10 +205,13 @@ def gibbs_sample_si(X,i,st0,allowed_states):
 #    print("ref:", Strue[i])
 #    print()
 #    assert False
-#    print(pmf)
+    print(pmf)
     choice = np.random.choice(allowed_states,p=pmf)        
+    if choice != st0[i]:
+        print("accepted new!")
     llc.cal_loglikelihood(X,tmp,i,choice)
     return choice
+
 def sample(ds,init,allowed,NITS=100):    
     X = ds.X
     strings = []
@@ -218,15 +221,12 @@ def sample(ds,init,allowed,NITS=100):
     g0 = llc.g0
     g1 = llc.g1
     trueminor = ds.minor
-    for x in ds.X:
-        print([q for i,q in x.get_aln()])
-        print(ds.get_consensus())
-        print(trueminor)
-        print()
 
     for nit in range(NITS):
         print("iteration=",nit,"currham=",ham(st0,trueminor),"currpi=%f" % pi, "currgam=%f" % g0, "currmu=%f" % g1)
-        for i,si in enumerate(st0):
+#        for i,si in enumerate(st0):
+        for i in ds.VALID_INDICES:
+            si = st0[i]
             newsi = gibbs_sample_si(X,i,st0,allowed[i])
 #            if newsi != st0[i]:
 #                print("******* NEW STATE")
@@ -237,8 +237,9 @@ def sample(ds,init,allowed,NITS=100):
 #        pi = llc.point_estimate_pi()
 #        gamma = mh_sample_gamma(X,st0,gamma)
 #        mu = mh_sample_mu(X,st0,mu)
-#        gamma = llc.point_estimate_gamma(X)
-        for k in range(10):
+#        g0 = llc.point_estimate_gamma(X)
+#        g1 = g0
+        for k in range(5):
             pi,g0,g1 = mh_sample_normal(X,st0,pi,g0,g1)
             params.append([pi,g0,g1])
         strings.append([c for c in st0])      
@@ -262,27 +263,25 @@ def gen_array(strings, L):
 
 if __name__ == "__main__":
     from simdata import DataSimulator
-    GENOME_LENGTH = 20
-    READ_LENGTH = 20
-    N_READS =50
-    PI = 0.60
-    GAMMA = 0.0001
-    D = 10
-    MU = 0.00
+    GENOME_LENGTH = 200
+    READ_LENGTH = 200
+    N_READS = 50
+    PI = 0.67
+    GAMMA = 0.01
+    D = 0
+    MU = 0.01
     GAMMA_UPPER = 0.4
     ds = DataSimulator(N_READS,READ_LENGTH,GENOME_LENGTH,GAMMA,PI,D,MU,1)
     for xi in ds.X:
         print("?",xi.get_string())
     allowed=[]
-    states_per_site = 4
+    states_per_site = 2
     for m in ds.M:
         allowed.append(sorted(np.argsort(m)[-states_per_site:]))
+#        print(allowed[-1])
         assert len(allowed[-1]) > 0
     llc = LogLikelihoodCache(ds.N_READS, GENOME_LENGTH, ds.GAMMA, ds.GAMMA, ds.get_consensus(), ds.PI)
     randy = [random.choice([0,1,2,3]) for i in range(GENOME_LENGTH)]
-#    assert randy != Strue
-    samps = sample(ds,randy,allowed)
-#    assert randy != Strue
+    samps = sample(ds,ds.get_minor(),allowed)
     C = gen_array(samps, GENOME_LENGTH)
-#    SaltC = gen_array(X2, GENOME_LENGTH)
     print("total error=",sum([1 for j in range(len(ds.get_minor())) if ds.get_minor()[j] != np.argmax(C[j])]))
