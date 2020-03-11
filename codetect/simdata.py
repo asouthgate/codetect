@@ -38,29 +38,28 @@ class DataSimulator(ReadData):
         self.minorpop = self.gen_population(self.minor, self.MU)
         minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
         majorhams = [ham(self.major, s) for s in self.majorpop[0]]
-        plt.bar(x=majorhams, height=self.majorpop[1])
-        plt.title("majorhams")
-        plt.show()                   
-        plt.bar(x=minorhams, height=self.minorpop[1])
-        plt.title("minorhams")
-        plt.show()
-
-        self.CONSENSUS = self.major
+        self._MAJOR = self.major
+        self._MINOR = self.minor
+#        self.get_consensus() = self.major
         # Simulate reads
         sys.stderr.write("Simulating reads\n")
         self.COVWALK = self.random_coverage_walk(COVQ)
-        self.CONSENSUS = [c2i[c] for c in self.CONSENSUS]
         self.X = self.sample_reads()
         # Parse data into a ReadData object
-        super(DataSimulator,self).__init__(self.X,self.CONSENSUS)
+        super(DataSimulator,self).__init__(self.X,self._MAJOR)
         self.N_READS = sum([Xi.count for Xi in self.X])
         # Guarantee that the consensus has the highest
-        for ci, c in enumerate(self.CONSENSUS):
+        for ci, c in enumerate(self.get_consensus()):
             assert max(self.M[ci]) == self.M[ci][c], (self.M[ci], c)
 
+    def get_minor(self):
+        return self._MINOR
+
+    def get_major(self):
+        return self._MAJOR
 
     def get_weight_base_array(self, T):
-        baseweights = np.zeros((len(self.CONSENSUS), 4))
+        baseweights = np.zeros((len(self.get_consensus()), 4))
         # FIRST CALCULATE THE MOST WEIGHTY BASE FOR EACH POSITION
         for k in range(len(self.V_INDEX)):
             v = np.zeros(4)
@@ -82,11 +81,11 @@ class DataSimulator(ReadData):
         # Calculate est pi
 
         bw = self.get_weight_base_array(T)
-        for i in range(len(self.CONSENSUS)):
-            if st[i] == self.CONSENSUS[i] and self.CONSENSUS[i] != c2i[self.minor[i]]:
-                print(i, st[i], self.CONSENSUS[i], c2i[self.minor[i]], self.M[i], bw[i])
+        for i in range(len(self.get_consensus())):
+            if st[i] == self.get_consensus()[i] and self.get_consensus()[i] != c2i[self.minor[i]]:
+                print(i, st[i], self.get_consensus()[i], c2i[self.minor[i]], self.M[i], bw[i])
         z1reads = [Xi for Xi in self.X if Xi.z == 1]
-        z1M = np.zeros((len(self.CONSENSUS), 4))
+        z1M = np.zeros((len(self.get_consensus()), 4))
         for Xi in z1reads:
             for pos,b in Xi.get_aln():
                 z1M[pos,b] += 1
@@ -99,13 +98,13 @@ class DataSimulator(ReadData):
             pbweights.append(tmp)
         for i,c in enumerate(st):
             if st[i] != c2i[ds.minor[i]]:
-                print(i,sum([len(l) for l in ds.V_INDEX[i]]),[len(l) for l in ds.V_INDEX[i]],ds.CONSENSUS[i], c2i[ds.minor[i]], ds.M[i], st[i], z1M[i], wba[i])
+                print(i,sum([len(l) for l in ds.V_INDEX[i]]),[len(l) for l in ds.V_INDEX[i]],ds.get_consensus()[i], c2i[ds.minor[i]], ds.M[i], st[i], z1M[i], wba[i])
                 for pbw in pbweights[i]:
                     print(pbw)
 
     def plot_genome(self,T,st):
-        cov0 = np.zeros(len(self.CONSENSUS))
-        cov1 = np.zeros(len(self.CONSENSUS))
+        cov0 = np.zeros(len(self.get_consensus()))
+        cov1 = np.zeros(len(self.get_consensus()))
         for Xi in self.X:
             if Xi.z == 0:
                 for p,b in Xi.map.items():
@@ -116,14 +115,14 @@ class DataSimulator(ReadData):
                     cov1[p] += 1
         self.COV = cov0+cov1
 
-        estcov0 = np.zeros(len(self.CONSENSUS))
-        estcov1 = np.zeros(len(self.CONSENSUS))
-        hamarr = np.zeros(len(self.CONSENSUS))
-        hamarr2 = np.zeros(len(self.CONSENSUS))
-        for i,hi in enumerate(self.CONSENSUS):
-            if self.CONSENSUS[i] != c2i[self.minor[i]]:
+        estcov0 = np.zeros(len(self.get_consensus()))
+        estcov1 = np.zeros(len(self.get_consensus()))
+        hamarr = np.zeros(len(self.get_consensus()))
+        hamarr2 = np.zeros(len(self.get_consensus()))
+        for i,hi in enumerate(self.get_consensus()):
+            if self.get_consensus()[i] != c2i[self.minor[i]]:
                 hamarr[i] = len(self.V_INDEX[i][c2i[self.minor[i]]])
-            if st[i] != self.CONSENSUS[i]:
+            if st[i] != self.get_consensus()[i]:
                 hamarr2[i] = len(self.V_INDEX[i][st[i]])
 
         for i,Xi in enumerate(self.X):
@@ -153,6 +152,13 @@ class DataSimulator(ReadData):
         """
         T = emObj.Tt
         st = emObj.st
+        plt.bar(x=majorhams, height=self.majorpop[1])
+        plt.title("majorhams")
+        plt.show()                   
+        plt.bar(x=minorhams, height=self.minorpop[1])
+        plt.title("minorhams")
+        plt.show()
+
 
         for k in range(len(self.COV)):
             assert self.COV[k] == sum([len(l) for l in self.V_INDEX[k]])
@@ -204,8 +210,8 @@ class DataSimulator(ReadData):
         for i in range(len(res)):
             roll = random.uniform(0,1)
             if roll < mutp:
-                res[i] = random.choice([c for c in "ATCG" if res[i] != c])
-        return "".join(res)
+                res[i] = random.choice([c for c in range(4) if res[i] != c])
+        return res
 
     def break_sticks(self, nsticks=100, alpha=5, min_middle=0.9):
 #        props = sorted(np.random.dirichlet([ for i in range(nsticks)]))
@@ -232,12 +238,12 @@ class DataSimulator(ReadData):
 
     def gen_pair(self,L,D):
         # Mutates by a fixed number
-        major = [random.choice("ATCG") for i in range(self.GENOME_LENGTH)]
+        major = [random.choice(range(4)) for i in range(self.GENOME_LENGTH)]
         minor = [c for c in major]
         mutpos = np.random.choice(len(major), D, replace=False)
         for j in mutpos:
-            minor[j] = random.choice([c for c in "ATCG" if c != major[j]])
-        return "".join(major),"".join(minor)
+            minor[j] = random.choice([c for c in range(4) if c != major[j]])
+        return major,minor
 
     def gen_aln(self,i,randpos, seq):
         sampinds = [randpos+l for l in range(self.READ_LENGTH)]
@@ -247,9 +253,9 @@ class DataSimulator(ReadData):
             c = seq[si]
             if roll < self.GAMMA:
                 alt = random.choice([z for z in "ATCG" if z != c])
-                aln.append_mapped_base(si,aln.c2i(alt))
+                aln.append_mapped_base(si,alt)
             else:
-                aln.append_mapped_base(si,aln.c2i(c))                    
+                aln.append_mapped_base(si,c)                    
         return aln
 
     def sample_reads_uniform(self,min_cov=20):
@@ -281,7 +287,8 @@ class DataSimulator(ReadData):
             seqi = np.random.choice([0,1],p=w)
          #   assert len(self.POPULATION) > 1
             popseqs, popfreqs = pops[seqi]
-            seq = np.random.choice(popseqs, p=popfreqs)
+            seqi = np.random.choice(range(len(popseqs)), p=popfreqs)
+            seq = popseqs[seqi]
   #          randpos = np.random.randint(0,len(seq)-self.READ_LENGTH+1)
             randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
             aln = self.gen_aln(i,randpos,seq)
@@ -328,7 +335,7 @@ if __name__ == "__main__":
     sys.stderr.write("D=%d\n" % D)
     sys.stderr.write("EPS=%d\n" % EPS)
 
-#    em = EM(ds.X, ds.M, ds.V_INDEX, ds.CONSENSUS, EPS)
+#    em = EM(ds.X, ds.M, ds.V_INDEX, ds.get_consensus(), EPS)
     ems = []
     for l in range(1):
         em = EM(ds, EPS)

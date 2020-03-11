@@ -12,9 +12,9 @@ class ReadData():
         X: data array of alignments.
         _CONSENSUS: consensus constant for major population.
     """
-    def __init__(self,X,consensus):        
-        self._CONSENSUS = consensus
-        assert self.CONSENSUS[0] in [0,1,2,3]
+    def __init__(self,X,reference):        
+        self._reference = reference
+        assert self._reference[0] in [0,1,2,3]
         self.X = X
         # Build V index
         sys.stderr.write("Building V index\n")
@@ -44,11 +44,12 @@ class ReadData():
         sys.stderr.write("Recalculating matrix M\n")
         # Build M matrix
         self.M = self.reads2mat()
+        # Recompute consensus to be actual consensus
+        self._CONSENSUS = [np.argmax(v) for v in self.M]
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
-        # Recompute consensus to be actual consensus
-        self._CONSENSUS = [np.argmax(v) for v in self.M]
+
 
     def get_consensus(self):
         return self._CONSENSUS
@@ -88,7 +89,7 @@ class ReadData():
 
     def build_Vindex(self): 
         """ Build a reference pos with c -> reads mapping to pos index. """
-        Vindex = [[[] for c in range(4)] for i in range(len(self._CONSENSUS))]
+        Vindex = [[[] for c in range(4)] for i in range(len(self._reference))]
         for i,Xi in enumerate(self.X):
             for pos, c in Xi.get_aln():
                 Vindex[pos][c].append(i)
@@ -96,7 +97,7 @@ class ReadData():
        
     def reads2mat(self):
         """ Build a per position base frequency dist matrix """
-        mat = np.zeros(shape=(len(self._CONSENSUS),4))
+        mat = np.zeros(shape=(len(self._reference),4))
         for i, Xi in enumerate(self.X):
             for pos,c in Xi.get_aln():
                 mat[pos,c] += Xi.count
@@ -124,5 +125,5 @@ class ReadData():
 #                if di in Xi.map:
 #                    del Xi.map[di]            
 #                    assert di in Xi.unmasked_map
-        return np.array([i for i in range(len(self._CONSENSUS)) if i not in delinds])
+        return np.array([i for i in range(len(self._reference)) if i not in delinds])
 
