@@ -159,12 +159,12 @@ class LogLikelihoodCache():
         else:
             return self.update_loglikelihood(X,i,b)
 
-def mh_sample_normal(X,st,pi,g0,g1,sigma_pi=0.03,sigma_g=0.015):
+def mh_sample_normal(X,st,pi,g0,g1,sigma_pi=0.01,sigma_g=0.002):
     u = random.uniform(0,1)
     proppi = np.random.normal(pi,sigma_pi)
     propg1 = np.random.normal(g1,sigma_g)
     propg0 = np.random.normal(g0,sigma_g)
-    deno = llc.L
+    deno =  llc.cal_loglikelihood(X,st,newpi=pi,newg0=g0,newg1=g1)
     assert deno != None
     assert pi == llc.pi, (pi,llc.pi)
     assert g0 == llc.g0
@@ -175,12 +175,14 @@ def mh_sample_normal(X,st,pi,g0,g1,sigma_pi=0.03,sigma_g=0.015):
 #    print(np.exp(numo),np.exp(deno))
     if 0 <= proppi <= 1 and 0 <= propg0 <= GAMMA_UPPER and 0 <= propg1 <= GAMMA_UPPER:
         if np.log(u) <= numo-deno:
+            print("accepting")
             return proppi,propg0,propg1
 #    else:
 #        print("out of bounds")
     #else reject
-#    print("reject")
-#    print("rejecting",proppi,propgamma,propmu)
+#   print("reject")
+    print("rejecting",proppi,propg0,propg1)
+#    print(numo,deno)
     llc.set_pi(pi)
     llc.set_g0(g0)
     llc.set_g1(g1)
@@ -240,9 +242,8 @@ def sample(ds,init,allowed,NITS=100):
 #        mu = mh_sample_mu(X,st0,mu)
 #        g0 = llc.point_estimate_gamma(X)
 #        g1 = g0
-        for k in range(5):
-            pi,g0,g1 = mh_sample_normal(X,st0,pi,g0,g1)
-            params.append([pi,g0,g1])
+        pi,g0,g1 = mh_sample_normal(X,st0,pi,g0,g1)
+        params.append([pi,g0,g1])
         strings.append([c for c in st0])      
 #    plt.hist(params[100:,0])
 #    print(np.mean(params[100:,0]))
@@ -263,14 +264,14 @@ def gen_array(strings, L):
     return C
 
 if __name__ == "__main__":
-    from simdata import DataSimulator
+    from data_simulator import DataSimulator
     GENOME_LENGTH = 2000
     READ_LENGTH = 200
     N_READS = 200
     PI = 0.67
-    GAMMA = 0.01
+    GAMMA = 0.03
     D = 10
-    MU = 0.001
+    MU = 0.01
     GAMMA_UPPER = 0.4
     ds = DataSimulator(N_READS,READ_LENGTH,GENOME_LENGTH,GAMMA,PI,D,MU,1)
 #    print(ds.get_consensus())
