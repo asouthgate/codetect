@@ -245,7 +245,7 @@ class DataSimulator(ReadData):
         # Mutates by a fixed number
         major = [random.choice(range(4)) for i in range(self.GENOME_LENGTH)]
         minor = [c for c in major]
-            mutpos = np.random.choice(len(major), D, replace=False)
+        mutpos = np.random.choice(len(major), D, replace=False)
         for j in mutpos:
             minor[j] = random.choice([c for c in range(4) if c != major[j]])
         return major,minor
@@ -274,23 +274,13 @@ class DataSimulator(ReadData):
                 aln.append_mapped_base(si,c)                    
         return aln
 
-    def sample_reads_uniform(self,min_cov=20):
-        w = [self.PI, 1-self.PI]
-        assert w[0] == max(w), "first sequence should be the major var"
-        X = []
-        pops = [self.majorpop, self.minorpop]
-        # Generate reads across the genome for minimal coverage
-        for randpos in range(self.GENOME_LENGTH):
-            for j in range(min_cov):
-                seqi = np.random.choice([0,1],p=w)
-                popseqs, popfreqs = pops[seqi]
-                seq = np.random.choice(popseqs, p=popfreqs)
-                aln = self.gen_aln(str(randpos)+str(j),randpos,seq)
-                aln.z = seqi
-                X.append(aln)
-        return X
-
     def sample_reads(self):
+        """
+        Sample a set of reads, currently using internal state (member variables).
+
+        Return:
+            X: a list of ReadAln objects sampled from the simulated population.
+        """
         w = [self.PI, 1-self.PI]
         assert w[0] == max(w), "first sequence should be the major var"
         X = []
@@ -298,11 +288,9 @@ class DataSimulator(ReadData):
         # Generate random coverage
         for i in range(self.N_READS):
             seqi = np.random.choice([0,1],p=w)
-         #   assert len(self.POPULATION) > 1
             popseqs, popfreqs = pops[seqi]
             seqi = np.random.choice(range(len(popseqs)), p=popfreqs)
             seq = popseqs[seqi]
-  #          randpos = np.random.randint(0,len(seq)-self.READ_LENGTH+1)
             randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
             aln = self.gen_aln(i,randpos,seq)
             aln.z = seqi
