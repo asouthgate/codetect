@@ -10,7 +10,9 @@ class ReadData():
 
     Attributes:
         X: data array of alignments.
-        _CONSENSUS: consensus constant for major population.
+        V_INDEX: mapping of position,base -> reads with that combination.
+        M: frequency distribution of bases across the alignment.
+        reference: reference to which alignments are mapped.
     """
     def __init__(self,X,reference):        
         self._reference = reference
@@ -19,7 +21,7 @@ class ReadData():
         # Build V index
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
-#        # Subsample
+        # Subsample
         sys.stderr.write("Subsampling across the reference\n")
 #        self.X = self.subsample()
         sys.stderr.write("%d reads survived\n" % len(self.X))
@@ -50,7 +52,6 @@ class ReadData():
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
 
-
     def get_consensus(self):
         return self._CONSENSUS
 
@@ -60,9 +61,16 @@ class ReadData():
                 assert i in self.V_INDEX[pos][b], (i, self.V_INDEX[pos])
 
     def simple_subsample(self, N_SAMPLES=500):
+        """
+        Subsample by choosing alignments randomly.
+        """
         return np.random.choice(self.X, N_SAMPLES, replace=False)
 
     def subsample(self, N_SAMPLES=2000):
+        """
+        Subsample across the reference to correct for depth imbalance.
+        """
+        #TODO: check math for legitimacy
         pos_start_arr = [[] for i in range(len(self.get_consensus()))]
         for i,Xi in enumerate(self.X):
             pos_start_arr[Xi.pos].append(i)
@@ -119,11 +127,5 @@ class ReadData():
             return True
         if len(delinds) == len(self._reference):
             raise ValueError("no sites remaining")
-#        for Xi in self.X:
-#            Xi.unmasked_map = {i:q for i,q in Xi.map.items()}
-#            for di in delinds:
-#                if di in Xi.map:
-#                    del Xi.map[di]            
-#                    assert di in Xi.unmasked_map
+        #TODO: figure out if and when it is legitimate to delete these bases from the reads entirely
         return np.array([i for i in range(len(self._reference)) if i not in delinds])
-
