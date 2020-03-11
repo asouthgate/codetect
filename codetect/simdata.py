@@ -252,7 +252,7 @@ class DataSimulator(ReadData):
             roll = random.uniform(0,1)
             c = seq[si]
             if roll < self.GAMMA:
-                alt = random.choice([z for z in "ATCG" if z != c])
+                alt = random.choice([z for z in range(4) if z != c])
                 aln.append_mapped_base(si,alt)
             else:
                 aln.append_mapped_base(si,c)                    
