@@ -117,8 +117,8 @@ class ReadData():
         sys.stderr.write("Deleting %d positions\n"% len(delinds))
         if len(delinds) == 0:
             return True
-#        if len(delinds) == len(self.CONSENSUS):
-#            raise ValueError("no sites remaining")
+        if len(delinds) == len(self._reference):
+            raise ValueError("no sites remaining")
 #        for Xi in self.X:
 #            Xi.unmasked_map = {i:q for i,q in Xi.map.items()}
 #            for di in delinds:
