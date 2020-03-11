@@ -10,10 +10,10 @@ class ReadData():
 
     Attributes:
         X: data array of alignments.
-        CONSENSUS: consensus constant for major population.
+        _CONSENSUS: consensus constant for major population.
     """
     def __init__(self,X,consensus):        
-        self.CONSENSUS = consensus
+        self._CONSENSUS = consensus
         assert self.CONSENSUS[0] in [0,1,2,3]
         self.X = X
         # Build V index
@@ -45,10 +45,13 @@ class ReadData():
         # Build M matrix
         self.M = self.reads2mat()
         # Calculate the number of mismatches
-        [Xi.calc_nm_major(self.CONSENSUS) for Xi in self.X]
+        [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
         # Recompute consensus to be actual consensus
-        self.CONSENSUS = [np.argmax(v) for v in self.M]
+        self._CONSENSUS = [np.argmax(v) for v in self.M]
+
+    def get_consensus(self):
+        return self._CONSENSUS
 
     def test_v_array(self):
         for i,Xi in enumerate(self.X):
@@ -59,7 +62,7 @@ class ReadData():
         return np.random.choice(self.X, N_SAMPLES, replace=False)
 
     def subsample(self, N_SAMPLES=2000):
-        pos_start_arr = [[] for i in range(len(self.CONSENSUS))]
+        pos_start_arr = [[] for i in range(len(self.get_consensus()))]
         for i,Xi in enumerate(self.X):
             pos_start_arr[Xi.pos].append(i)
         subsample = []
@@ -85,7 +88,7 @@ class ReadData():
 
     def build_Vindex(self): 
         """ Build a reference pos with c -> reads mapping to pos index. """
-        Vindex = [[[] for c in range(4)] for i in range(len(self.CONSENSUS))]
+        Vindex = [[[] for c in range(4)] for i in range(len(self._CONSENSUS))]
         for i,Xi in enumerate(self.X):
             for pos, c in Xi.get_aln():
                 Vindex[pos][c].append(i)
@@ -93,7 +96,7 @@ class ReadData():
        
     def reads2mat(self):
         """ Build a per position base frequency dist matrix """
-        mat = np.zeros(shape=(len(self.CONSENSUS),4))
+        mat = np.zeros(shape=(len(self._CONSENSUS),4))
         for i, Xi in enumerate(self.X):
             for pos,c in Xi.get_aln():
                 mat[pos,c] += Xi.count
@@ -113,13 +116,13 @@ class ReadData():
         sys.stderr.write("Deleting %d positions\n"% len(delinds))
         if len(delinds) == 0:
             return True
-        if len(delinds) == len(self.CONSENSUS):
-            raise ValueError("no sites remaining")
+#        if len(delinds) == len(self.CONSENSUS):
+#            raise ValueError("no sites remaining")
 #        for Xi in self.X:
 #            Xi.unmasked_map = {i:q for i,q in Xi.map.items()}
 #            for di in delinds:
 #                if di in Xi.map:
 #                    del Xi.map[di]            
 #                    assert di in Xi.unmasked_map
-        return np.array([i for i in range(len(self.CONSENSUS)) if i not in delinds])
+        return np.array([i for i in range(len(self._CONSENSUS)) if i not in delinds])
 
