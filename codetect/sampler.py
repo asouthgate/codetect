@@ -67,7 +67,8 @@ class LogLikelihoodCache():
 
     def cal_read_loglikelihood(self, ri, read, st, ci):
         sumo = 0
-        for j in range(len(self.consensus)):
+#        for j in range(len(self.consensus)):
+        for j in read.map:
             logp = self.getlogp(ci,read.map[j],st[j])
             self.Larr[ci,ri,j] = logp
             sumo += self.Larr[ci,ri,j]
@@ -94,16 +95,17 @@ class LogLikelihoodCache():
         for ri, read in enumerate(X):
             #** TODO: likelihood should not be recomputed for both here unless gamma has changed
             # 2X slower to do so
-            logp0 = self.getlogp(0,read.map[i],self.consensus[i])
-            self.Lsums0[ri] -= self.Larr[0,ri,i]
-            self.Larr[0,ri,i] = logp0
-            self.Lsums0[ri] += logp0             
-            #*****
-            logp1 = self.getlogp(1,read.map[i],b)
-            self.Lsums1[ri] -= self.Larr[1,ri,i]
-            self.Larr[1,ri,i] = logp1
-            self.Lsums1[ri] += logp1             
-            self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(self.pi), self.Lsums1[ri] + np.log(1-self.pi)])
+            if i in read.map:
+                logp0 = self.getlogp(0,read.map[i],self.consensus[i])
+                self.Lsums0[ri] -= self.Larr[0,ri,i]
+                self.Larr[0,ri,i] = logp0
+                self.Lsums0[ri] += logp0             
+                #*****
+                logp1 = self.getlogp(1,read.map[i],b)
+                self.Lsums1[ri] -= self.Larr[1,ri,i]
+                self.Larr[1,ri,i] = logp1
+                self.Lsums1[ri] += logp1             
+                self.Lsums[ri] = logsumexp([self.Lsums0[ri] + np.log(self.pi), self.Lsums1[ri] + np.log(1-self.pi)])
             sumo += self.Lsums[ri]*X[ri].count
         self.L = sumo
         return sumo             
@@ -163,6 +165,7 @@ def mh_sample_normal(X,st,pi,g0,g1,sigma_pi=0.03,sigma_g=0.015):
     propg1 = np.random.normal(g1,sigma_g)
     propg0 = np.random.normal(g0,sigma_g)
     deno = llc.L
+    assert deno != None
     assert pi == llc.pi, (pi,llc.pi)
     assert g0 == llc.g0
     assert g1 == llc.g1
@@ -205,10 +208,8 @@ def gibbs_sample_si(X,i,st0,allowed_states):
 #    print("ref:", Strue[i])
 #    print()
 #    assert False
-    print(pmf)
+#    print(pmf)
     choice = np.random.choice(allowed_states,p=pmf)        
-    if choice != st0[i]:
-        print("accepted new!")
     llc.cal_loglikelihood(X,tmp,i,choice)
     return choice
 
@@ -220,8 +221,7 @@ def sample(ds,init,allowed,NITS=100):
     pi = llc.pi
     g0 = llc.g0
     g1 = llc.g1
-    trueminor = ds.minor
-
+    trueminor = ds.get_consensus()
     for nit in range(NITS):
         print("iteration=",nit,"currham=",ham(st0,trueminor),"currpi=%f" % pi, "currgam=%f" % g0, "currmu=%f" % g1)
 #        for i,si in enumerate(st0):
@@ -233,6 +233,7 @@ def sample(ds,init,allowed,NITS=100):
 #            if i > 10:
 #                assert False
             st0[i] = newsi
+#            print(llc.L)
 #        pi = mh_sample_pi(X,st0,pi)
 #        pi = llc.point_estimate_pi()
 #        gamma = mh_sample_gamma(X,st0,gamma)
@@ -263,15 +264,18 @@ def gen_array(strings, L):
 
 if __name__ == "__main__":
     from simdata import DataSimulator
-    GENOME_LENGTH = 200
+    GENOME_LENGTH = 2000
     READ_LENGTH = 200
-    N_READS = 50
+    N_READS = 200
     PI = 0.67
     GAMMA = 0.01
-    D = 0
-    MU = 0.01
+    D = 10
+    MU = 0.001
     GAMMA_UPPER = 0.4
     ds = DataSimulator(N_READS,READ_LENGTH,GENOME_LENGTH,GAMMA,PI,D,MU,1)
+#    print(ds.get_consensus())
+#    print(ds.get_major())
+#    assert ds.get_consensus() == ds.get_major(), ham(ds.get_consensus(),ds.get_major())
     for xi in ds.X:
         print("?",xi.get_string())
     allowed=[]
