@@ -1,6 +1,7 @@
 import sys
 import random
 import numpy as np
+import functools
 
 def ham(s1, s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
@@ -18,6 +19,8 @@ class ReadData():
         self._reference = reference
         assert self._reference[0] in [0,1,2,3]
         self.X = X
+        # Establish valid indices for iteration
+        self.VALID_INDICES = [i for i in range(len(self._reference))]
         # Build V index
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
@@ -43,12 +46,15 @@ class ReadData():
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
 
-    def filter(self):
+    def filter(self,t):
         """ Mask low-variance positions. """
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-        self.VALID_INDICES = self.get_indices()
+        self.VALID_INDICES = self.get_indices(t=t)
         self.test_v_array() 
+
+    def pos2reads(self,i):
+        return functools.reduce(lambda a,b : a+b,self.V_INDEX[i])
 
     def get_consensus(self):
         return self._CONSENSUS

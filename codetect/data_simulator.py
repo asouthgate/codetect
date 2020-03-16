@@ -37,6 +37,12 @@ class DataSimulator(ReadData):
         self.minorpop = self.gen_population(self.minor, self.MU)
         minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
         majorhams = [ham(self.major, s) for s in self.majorpop[0]]
+        plt.bar(x=majorhams, height=self.majorpop[1])
+        plt.title("majorhams")
+        plt.show()                   
+        plt.bar(x=minorhams, height=self.minorpop[1])
+        plt.title("minorhams")
+        plt.show()
         self._MAJOR = self.major
         self._MINOR = self.minor
         # Simulate reads
@@ -130,12 +136,6 @@ class DataSimulator(ReadData):
         """
         T = emObj.Tt
         st = emObj.st
-        plt.bar(x=majorhams, height=self.majorpop[1])
-        plt.title("majorhams")
-        plt.show()                   
-        plt.bar(x=minorhams, height=self.minorpop[1])
-        plt.title("minorhams")
-        plt.show()
         for k in range(len(self.COV)):
             assert self.COV[k] == sum([len(l) for l in self.V_INDEX[k]])
         nms = np.array([Xi.nm_major for Xi in self.X])
