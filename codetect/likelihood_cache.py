@@ -1,5 +1,6 @@
 import numpy as np
 import math      
+from log import logger
 
 def logsumexp(logls):
     m = max(logls)
@@ -8,7 +9,7 @@ def logsumexp(logls):
         sumo += np.exp(l-m)
     return m + np.log(sumo) 
 
-def approx(a,b,eps=0.0000000000001):
+def approx(a,b,eps=0.000001):
     if math.fabs(a-b) < eps:
         return True
     return False
@@ -63,12 +64,11 @@ class MixtureModel():
         newst = [c for c in self.st]
         if i  != None:
             newst[i] = newb
-        print("Updating loglikelihood. Was:", self.llc.L)
-        print("consensus  :", self.consensus)
-        print("prev string:", self.st)
-        print("new string:", newst)
-        print("new parameters:", i, newb, newpi, newg0, newg1)
-        print()
+        logger.warning("Updating loglikelihood. Was: %s" % self.llc.L)
+        logger.warning("consensus  : %s" % str(self.consensus))
+        logger.warning("prev string: %s" % str(self.st))
+        logger.warning("new string: %s" % str(newst))
+        logger.warning("new parameters: %s %s %s %s %s" % (i, newb, newpi, newg0, newg1))
         self.llc.nmcache.test_nmarr(ds,ds.get_consensus(),self.st)
 
         #//*** Cases ***//
@@ -194,31 +194,30 @@ class LogLikelihoodCalculator():
             newi: index of new base.
             newb: new base.
         """
-        print("\tupdating ll %d %d %d %f %f %f %f" % (newi, newb, oldb, logg1, log1mg1, logpi, log1mpi))
+        logger.warning("\tupdating ll %d %d %d %f %f %f %f" % (newi, newb, oldb, logg1, log1mg1, logpi, log1mpi))
         assert oldb != newb, "Loglikelihood update requested but no base was changed! Wasteful or a bug."
         read_list = rd.pos2reads(newi)
-        print("\treads at position %d:"%newi, read_list)
         for ri in read_list: 
             read = rd.X[ri]
-            print("\tupdating read %d, curr likelihood %f" % (ri, self.margL[ri]))
-            print("\tread str:",read.get_ints())
-            print("\tnew  str:", newst)
+            logger.warning("\tupdating read %d, curr likelihood %f" % (ri, self.margL[ri]))
+            logger.warning("\tread str: %s" % str(read.get_ints()))
+            logger.warning("\tnew  str: %s" % str(newst))
             if read.map[newi] == newb:
-                print("\tnew base match; decrease mismatches, increase likelihood")
+                logger.warning("\tnew base match; decrease mismatches, increase likelihood")
                 # TODO: compute log gamma once per round; dont need to log loads of times. slow.
                 self.condL[1,ri] -= logg1
                 self.condL[1,ri] += log1mg1
                 self.nmcache.update(1,ri,-1)
                 self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
             elif read.map[newi] == oldb:
-                print("\told base match; increase mismatches, decrease likelihood")
+                logger.warning("\told base match; increase mismatches, decrease likelihood")
                 self.condL[1,ri] -= log1mg1
                 self.condL[1,ri] += logg1
                 self.nmcache.update(1,ri,1)
                 self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
             # TODO: remove this slow check
-            print("\tnew condlikelihood %f" % (self.condL[1,ri] * read.count))
-            print("\tnew marglikelihood %f" % self.margL[ri])
+            logger.warning("\tnew condlikelihood %f" % (self.condL[1,ri] * read.count))
+            logger.warning("\tnew marglikelihood %f" % self.margL[ri])
             self.nmcache.test_read_nm(ri,read,rd.get_consensus(),newst)
             slowcheck = self.cal_read_loglikelihood(ri,read,1,logg1, log1mg1) * read.count
             assert approx(self.condL[1,ri]*read.count,slowcheck), "Likelihood computed incorrectly; %f should be %f." % (self.condL[1,ri] * read.count, slowcheck)

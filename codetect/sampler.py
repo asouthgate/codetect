@@ -5,6 +5,8 @@ from scipy.special import beta
 import matplotlib.pyplot as plt
 from aln import ReadAln
 from likelihood_cache import *
+from log import logger
+import logging
 
 def ham(s1,s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
@@ -19,9 +21,9 @@ def mh_sample_normal(mm,ds,st,pi,g0,g1,sigma_pi=0.01,sigma_g=0.002):
     if 0 <= proppi <= 1 and 0 <= propg0 <= GAMMA_UPPER and 0 <= propg1 <= GAMMA_UPPER:
         numo = mm.cal_loglikelihood(ds,newpi=proppi,newg0=propg0,newg1=propg1)
         if np.log(u) <= numo-deno:
-            print("accepting", proppi, propg0, propg1)
+            logger.warning("accepting %f %f %f" % (proppi, propg0, propg1))
             return proppi, propg0, propg1
-    print("rejecting",proppi,propg0,propg1)
+    logger.warning("rejecting %f %f %f" % (proppi,propg0,propg1))
     mm.cal_loglikelihood(ds,newpi=pi,newg0=g0,newg1=g1)
     return pi, g0, g1
 
@@ -53,12 +55,12 @@ def gibbs_sample_si(ds,i,allowed_states,mm):
     choice = np.random.choice(allowed_states,p=pmf)        
     ll = mm.cal_loglikelihood(ds,i=i,newb=choice)
     if choice != oldb:
-        print("new b accepted", choice, oldb, ll)
+        logger.warning("new b accepted", choice, oldb, ll)
     else:
-        print("new b rejected", choice, oldb, ll)
+        logger.warning("new b rejected", choice, oldb, ll)
     return choice
 
-def sample(ds,init,allowed,NITS=100):    
+def sample(ds,init,allowed,NITS=500):    
     mm = MixtureModel(ds, ds.GAMMA, ds.GAMMA, ds.get_consensus(), ds.PI, init)
     X = ds.X
     strings = []
@@ -69,7 +71,7 @@ def sample(ds,init,allowed,NITS=100):
     g1 = mm.g1
     trueminor = ds.get_minor()
     for nit in range(NITS):
-        print("i=",nit,"L=", mm.cal_loglikelihood(ds),"currham=",ham(mm.st,trueminor),"currpi=%f" % pi, "currgam=%f" % g0, "currmu=%f" % g1)
+        sys.stderr.write("i=%d,L=%f,currham=%d,currpi=%f,currgam=%f,currmu=%f\n" % (nit, mm.cal_loglikelihood(ds), ham(mm.st,trueminor), pi, g0,  g1))
         for i in ds.VALID_INDICES:
             newsi = gibbs_sample_si(ds,i,allowed[i],mm)
         pi,g0,g1 = mh_sample_normal(mm,ds,st0,pi,g0,g1)
@@ -84,7 +86,7 @@ def sample(ds,init,allowed,NITS=100):
 #    plt.hist(params[100:,2])
 #    print(np.mean(params[100:,2]))
 #    plt.show()
-    return strings
+    return strings, params
 
 def gen_array(strings, L):
     C = np.zeros((L,4))
@@ -95,11 +97,14 @@ def gen_array(strings, L):
 
 if __name__ == "__main__":
     from data_simulator import DataSimulator
-    GENOME_LENGTH = 10
-    READ_LENGTH = 10
-    N_READS = 20
+    import sys
+    if "--debug" not in sys.argv:
+        logging.disable(logging.CRITICAL)
+    GENOME_LENGTH = 2000
+    READ_LENGTH = 2000
+    N_READS = 1000
     PI = 0.7
-    GAMMA = 0.0001
+    GAMMA = 0.01
     D = 2
     MU = 0.000
     GAMMA_UPPER = 0.4
@@ -118,7 +123,12 @@ if __name__ == "__main__":
 #        print(allowed[-1])
         assert len(allowed[-1]) > 0
     randy = [random.choice([0,1,2,3]) for i in range(GENOME_LENGTH)]
-    samps = sample(ds,[c for c in ds.get_minor()],allowed)
-    C = gen_array(samps, GENOME_LENGTH)
+    strings,params = sample(ds,[c for c in ds.get_minor()],allowed)
+    params = np.array(params)
+    meanpi = np.mean(params[:,0])
+    meang0 = np.mean(params[:,1])
+    meang1 = np.mean(params[:,2])
+    print("mean pi=%f, mean g0=%f, mean g1=%f" % (meanpi, meang0, meang1))
+    C = gen_array(strings, GENOME_LENGTH)
     print("total error to minor=",sum([1 for j in range(len(ds.get_minor())) if ds.get_minor()[j] != np.argmax(C[j])]))
     print("total error to major=",sum([1 for j in range(len(ds.get_consensus())) if ds.get_minor()[j] != np.argmax(C[j])]))
