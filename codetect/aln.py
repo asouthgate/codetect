@@ -36,6 +36,9 @@ class ReadAln():
     def get_string(self):
         return "".join([self.i2c(b) for p,b in self.get_aln()])
 
+    def get_ints(self):
+        return [b for p,b in self.get_aln()]
+
     def cal_ham(self,S): 
         # DEPRECIATED, SOMEHOW
         h = 0
