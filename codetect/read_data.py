@@ -41,7 +41,7 @@ class ReadData():
         # Build M matrix
         self.M = self.reads2mat()
         # Recompute consensus to be actual consensus
-        self._CONSENSUS = [np.argmax(v) for v in self.M]
+        self._CONSENSUS = (np.argmax(v) for v in self.M)
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
