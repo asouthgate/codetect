@@ -110,11 +110,15 @@ class MixtureModel():
         # Now perform a full recalculation
         assert not self.initialized, "State is initialized but a full recomputation is requested! Bug."
         assert newbs == None, "Full recomputation requested but new base also requested. Bug."
-        res = self.llc.cal_full_loglikelihood(ds, self.logg0, self.log1mg0, self.logg1, self.log1mg1, self.logpi, self.log1mpi)
+        # Case 4.a: only pi changed; partial recalculation required
+        if newg0 == newg1 == None:
+            res = self.llc.cal_pi_loglikelihood(ds, self.logpi, self.log1mpi)
+        else:
+        # Case 4.b: pi, g0, g1 changes; full recalculation required
+            res = self.llc.cal_full_loglikelihood(ds, self.logg0, self.log1mg0, self.logg1, self.log1mg1, self.logpi, self.log1mpi)
         assert self.llc.L != None
         self.initialized = True
         return res
-
 
 class NmCache():
     def __init__(self, ds, initstr):
@@ -176,6 +180,19 @@ class LogLikelihoodCalculator():
             logq: log(1-g), where g is the gamma parameter for ci
         """
         return log1mg*(read.get_length()-self.nmcache[ci,ri]) + logg*(self.nmcache[ci,ri])
+    def cal_pi_loglikelihood(self, rd, logpi, log1mpi):
+        """ Calculate the full log likelihood of all reads.
+
+        Args:
+            rd: ReadData object containing read data.
+        """
+        # TODO: if only pi changes, read condL likelihoods do not need to be recomputed
+        for ri,read in enumerate(rd.X):
+            self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
+            assert self.margL[ri] < 0.0, "Full likelihood calculation resulted in improper likelihood (>0):%f" % self.margL[ri]
+        self.L = sum(self.margL)
+        assert self.L != None
+        return self.L
     def cal_full_loglikelihood(self, rd, logg0, log1mg0, logg1, log1mg1, logpi, log1mpi):
         """ Calculate the full log likelihood of all reads.
 
