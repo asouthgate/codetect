@@ -93,7 +93,7 @@ class MixtureModelSampler():
         nmuts = 0
         ntotal = 0
         for ri,row in enumerate(rd.C):
-            if max(rd.M) > t:
+            if max(rd.M[ri]) > t:
                 nmuts += (sum(row)-max(row))
                 ntotal += sum(row)
         return nmuts/ntotal               
@@ -126,7 +126,26 @@ class MixtureModelSampler():
         self.mm.cal_loglikelihood(rd,newpi=curr_pi,newg0=curr_g0,newg1=curr_g1)
         return curr_pi, curr_g0, curr_g1
     def mh_sample_normal_onlypi(self,rd,sigma_pi=0.01):
-        pass
+        """ Sample pi using Metropolis-Hastings. 
+        
+        Args:
+            rd: ReadData object
+        Optional Args:
+            sigma_pi: variance for pi proposals.
+        """
+        u = random.uniform(0,1)
+        curr_pi = self.mm.pi
+        proppi = np.random.normal(curr_pi,sigma_pi)
+        deno =  self.mm.cal_loglikelihood(rd,newpi=curr_pi)
+        assert deno != None
+        if 0 <= proppi <= 1:
+            numo = self.mm.cal_loglikelihood(rd,newpi=proppi)
+            if np.log(u) <= numo-deno:
+                logger.warning("accepting %f %f %f" % (proppi))
+                return proppi
+        logger.warning("rejecting %f %f %f" % (proppi))
+        self.mm.cal_loglikelihood(rd,newpi=curr_pi)
+        return curr_pi
 
     def get_difference_positions(self, currs, props):
         # curris = propis! always
