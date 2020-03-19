@@ -55,7 +55,7 @@ class ReadAln():
             return aln
  
     def i2c(self,i):
-        return list("ACGT")[i]
+        return list("ACGT-")[i]
 
     def c2i(self,c):
         return {"A":0, "C":1, "G":2, "T":3}[c]
