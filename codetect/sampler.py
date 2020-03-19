@@ -61,7 +61,7 @@ class RefPropDist():
 
 class MixtureModelSampler():
     """ Samples from posterior of mixture model parameters. """
-    def __init__(self,initstring=None,allowed=None,dmat=None,refs=None):
+    def __init__(self,rd,initstring=None,allowed=None,dmat=None,refs=None,estimate_gamma=True):
         """
         Args:
             initstring: initialization string.
@@ -73,11 +73,31 @@ class MixtureModelSampler():
             assert len(refs) == len(dmat)
             self.refi = random.randint(0,len(refs)-1)
             initstring = refs[self.refi]
-        self.mm = MixtureModel(ds, random.uniform(0.0001,0.02), random.uniform(0.0001, 0.02), ds.get_consensus(), random.uniform(0.5,1.0), initstring)
+        if estimate_gamma:
+            self.fixed_gamma = None
+            self.mm = MixtureModel(rd, random.uniform(0.0001,0.02), random.uniform(0.0001, 0.02), rd.get_consensus(), random.uniform(0.5,1.0), initstring)
+        else:
+            est_gamma = self.point_estimate_gamma(rd)
+            self.fixed_gamma = est_gamma
+            self.mm = MixtureModel(rd, est_gamma, est_gamma, rd.get_consensus(), random.uniform(0.5,1.0), initstring)
         self.sample_strings = []
         self.sample_params = []
         self.sample_Ls = []
         self.allowed = allowed
+
+    def point_estimate_gamma(self,rd,t=0.95):
+        """ Point estimate gamma 
+        
+        Assumes to take the positions that probably aren't variant positions.
+        """
+        nmuts = 0
+        ntotal = 0
+        C = rd.C
+        for ri,row in enumerate(C):
+            if max(M) > t:
+                nmuts += (sum(row)-max(row))
+                ntotal += sum(row)
+        return nmuts/ntotal               
 
     def mh_sample_normal(self,rd,sigma_pi=0.01,sigma_g=0.002):
         """ Sample triple pi, gamma0, gamma1 using Metropolis-Hastings. 
@@ -193,7 +213,10 @@ class MixtureModelSampler():
             currL = self.mm.cal_loglikelihood(ds)
             sys.stderr.write("i=%d,L=%f,refi=%d,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, refi, pi, g0,  g1))
             refi = self.mh_reference_sample(ds, refi)
-            pi,g0,g1 = self.mh_sample_normal(ds)
+            if self.fixed_gamma is None:
+                pi,g0,g1 = self.mh_sample_normal(ds)
+            else:
+                pi = self.mh_sample_normal_pionly(ds)
             self.sample_params.append([pi,g0,g1])
             self.sample_strings.append(self.refs[refi]) 
             self.sample_Ls.append(currL)
@@ -265,7 +288,7 @@ if __name__ == "__main__":
     READ_LENGTH = 200
     N_READS = 5000
     PI = 0.8
-    GAMMA = 0.03
+    GAMMA = 0.02
     D = 2
     MU = 0.000
     GAMMA_UPPER = 0.04
@@ -291,7 +314,7 @@ if __name__ == "__main__":
     sys.stderr.write("Removing those too close to fixed point\n")
     fixed_point = ds.get_consensus()
     refs,dmat = del_close_to_fixed_point(fixed_point,MIN_D,refs,dmat)
-    mms = MixtureModelSampler(refs=refs,dmat=dmat)
+    mms = MixtureModelSampler(ds,refs=refs,dmat=dmat,estimate_gamma=False)
 
     #//*** Sample ***//
     strings,params,Ls = mms.sample_refs(ds,nits=1000)
