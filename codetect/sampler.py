@@ -25,7 +25,6 @@ class RefPropDist():
         self.cmf = np.zeros(dmat.shape)
         self.rankmat = np.zeros(dmat.shape).astype(int)
         for i in range(len(dmat)):
-#            print(dmat[i])
             for k in range(len(dmat[i])):
                 self.pmf[i,k] = 1/(1+dmat[i,k]**3)
             # Should not sample itself!!!
@@ -33,35 +32,17 @@ class RefPropDist():
             self.pmf[i] /= sum(self.pmf[i])
             # Now arg sort it; keep track of which index has which probability
             self.rankmat[i] = np.argsort(self.pmf[i])
-#            for ri in self.rankmat[i][-50::-1]:
-#                print(self.pmf[i,ri], self.dmat[i,ri])
-            # Now sort the pmf by that
-#            self.pmf[i] = self.pmf[i][self.rankmat[i]]
-            # Create a cmf for sampling
-#            self.cmf[i,0] = self.pmf[i,0]
-#            for j in range(1,len(self.pmf[i])):
-#                self.cmf[i,j] = self.cmf[i,j-1] + self.pmf[i,j]                
-#            plt.scatter(self.pmf[i], self.dmat[i][self.rankmat[i]])
-#            plt.show()
-#            plt.plot(self.cmf[i])
-#            plt.show()
-
     def sample(self,i):        
         # TO DO: a bit slow
         j = np.random.choice([k for k in range(len(self.pmf[i]))], p=self.pmf[i])
         assert i != j
-#        print(i,j,self.pmf[i,j],self.dmat[i,j])
         return j
-#        u = random.uniform(0,1)
-#        for bi in range(len(self.cmf[i])):
-#            if u < self.cmf[i,bi]:
-#                return self.rankmat[i,bi]
     def logpdf(self,i,j):
         return np.log(self.pmf[i,j])
 
 class MixtureModelSampler():
     """ Samples from posterior of mixture model parameters. """
-    def __init__(self,rd,initstring=None,allowed=None,dmat=None,refs=None,estimate_gamma=True):
+    def __init__(self,rd,fixed_point,initstring=None,allowed=None,dmat=None,refs=None,estimate_refs=True,estimate_gamma=True):
         """
         Args:
             initstring: initialization string.
@@ -73,13 +54,18 @@ class MixtureModelSampler():
             assert len(refs) == len(dmat)
             self.refi = random.randint(0,len(refs)-1)
             initstring = refs[self.refi]
+        if not estimate_refs:
+            self.estimate_refs = False
+            assert len(refs) == 1, "If not estimating refs, must provide only one ref"
         if estimate_gamma:
             self.fixed_gamma = None
-            self.mm = MixtureModel(rd, random.uniform(0.0001,0.02), random.uniform(0.0001, 0.02), rd.get_consensus(), random.uniform(0.5,1.0), initstring)
+            self.mm = MixtureModel(rd, random.uniform(0.0001,0.02), random.uniform(0.0001, 0.02), fixed_point, random.uniform(0.5,1.0), initstring)
         else:
             est_gamma = self.point_estimate_gamma(rd)
+            sys.stderr.write("Point estimated gamma as %f\n" % est_gamma)
             self.fixed_gamma = est_gamma
-            self.mm = MixtureModel(rd, est_gamma, est_gamma, rd.get_consensus(), random.uniform(0.5,1.0), initstring)
+            self.mm = MixtureModel(rd, est_gamma, est_gamma, fixed_point, random.uniform(0.5,1.0), initstring)
+            self.mm.cal_loglikelihood(rd)
         self.sample_strings = []
         self.sample_params = []
         self.sample_Ls = []
@@ -141,9 +127,9 @@ class MixtureModelSampler():
         if 0 <= proppi <= 1:
             numo = self.mm.cal_loglikelihood(rd,newpi=proppi)
             if np.log(u) <= numo-deno:
-                logger.warning("accepting %f %f %f" % (proppi))
+                logger.warning("accepting %f" % (proppi))
                 return proppi
-        logger.warning("rejecting %f %f %f" % (proppi))
+        logger.warning("rejecting %f" % (proppi))
         self.mm.cal_loglikelihood(rd,newpi=curr_pi)
         return curr_pi
 
@@ -214,6 +200,7 @@ class MixtureModelSampler():
         else:
             logger.warning("new b rejected", choice, oldb, ll)
         return choice
+
     def sample_refs(self,rd,nits=300):
         """ Sample from the full posterior of the mixture model using references only.
         
@@ -234,7 +221,7 @@ class MixtureModelSampler():
             if self.fixed_gamma is None:
                 pi,g0,g1 = self.mh_sample_normal(ds)
             else:
-                pi = self.mh_sample_normal_pionly(ds)
+                pi = self.mh_sample_normal_onlypi(ds)
             self.sample_params.append([pi,g0,g1])
             self.sample_strings.append(self.refs[refi]) 
             self.sample_Ls.append(currL)
@@ -332,7 +319,7 @@ if __name__ == "__main__":
     sys.stderr.write("Removing those too close to fixed point\n")
     fixed_point = ds.get_consensus()
     refs,dmat = del_close_to_fixed_point(fixed_point,MIN_D,refs,dmat)
-    mms = MixtureModelSampler(ds,refs=refs,dmat=dmat,estimate_gamma=False)
+    mms = MixtureModelSampler(ds,ds.get_consensus(),refs=refs,dmat=dmat,estimate_gamma=False)
 
     #//*** Sample ***//
     strings,params,Ls = mms.sample_refs(ds,nits=1000)
