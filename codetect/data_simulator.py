@@ -256,11 +256,11 @@ class DataSimulator(ReadData):
             possinds = np.where(row <= D)[0]
             if len(possinds) > 0:
                 mj = random.choice(possinds)
-        return mutate_n(refs[mi],2), mutate_n(refs[mj],2)
+        return self.mutate_n(refs[mi],2), self.mutate_n(refs[mj],2)
 
     def mutate_n(self,seq,n):
         newseq = [c for c in seq]
-        mutpos = np.random.choice(len(major), n, replace=False)
+        mutpos = np.random.choice(len(seq), n, replace=False)
         for j in mutpos:
             newseq[j] = random.choice([c for c in range(4) if c != seq[j]])
         return newseq
