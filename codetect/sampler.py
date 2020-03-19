@@ -70,6 +70,7 @@ class MixtureModelSampler():
         if dmat is not None:
             self.ref_prop_dist = RefPropDist(dmat)
             self.refs = refs
+            assert len(refs) == len(dmat)
             self.refi = random.randint(0,len(refs)-1)
             initstring = refs[self.refi]
         self.mm = MixtureModel(ds, random.uniform(0.0001,0.02), random.uniform(0.0001, 0.02), ds.get_consensus(), random.uniform(0.5,1.0), initstring)
@@ -92,8 +93,9 @@ class MixtureModelSampler():
         curr_g0 = self.mm.g0
         curr_g1 = self.mm.g1
         proppi = np.random.normal(curr_pi,sigma_pi)
-        propg1 = np.random.normal(curr_g1,sigma_g)
+#        propg1 = np.random.normal(curr_g1,sigma_g)
         propg0 = np.random.normal(curr_g0,sigma_g)
+        propg1 = propg0
         deno =  self.mm.cal_loglikelihood(rd,newpi=curr_pi,newg0=curr_g0,newg1=curr_g1)
         assert deno != None
         if 0 <= proppi <= 1 and 0 <= propg0 <= GAMMA_UPPER and 0 <= propg1 <= GAMMA_UPPER:
@@ -229,6 +231,21 @@ def gen_array(strings):
             C[ci,c] += 1
     return C
 
+def del_close_to_fixed_point(fixed_point,mind,refs,dmat):
+    """ Remove references too close to a fixed point. """
+    new_refs = []
+    inds2del = []
+    for ri,ref in enumerate(refs):
+        if ham(ref, fixed_point) >= mind:
+            new_refs.append(ref)
+        else:
+            inds2del.append(ri)
+    inds2del = np.array(inds2del)
+    dmat = np.delete(dmat,inds2del,0)
+    dmat = np.delete(dmat,inds2del,1)
+    assert len(new_refs) == dmat.shape[0] == dmat.shape[1], (len(new_refs), dmat.shape, len(inds2del))
+    return new_refs, dmat
+
 if __name__ == "__main__":
     from data_simulator import DataSimulator
     from Bio import SeqIO
@@ -246,12 +263,13 @@ if __name__ == "__main__":
     #//*** Simulate dataset ***//
 #    GENOME_LENGTH = 30
     READ_LENGTH = 200
-    N_READS = 500
+    N_READS = 5000
     PI = 0.8
     GAMMA = 0.03
     D = 2
     MU = 0.000
-    GAMMA_UPPER = 0.4
+    GAMMA_UPPER = 0.04
+    MIN_D = 10
     ds = DataSimulator(N_READS,READ_LENGTH,GAMMA,PI,D,MU,1,TEMPLATE_SEQUENCES=refs,DMAT=dmat)
     assert len(ds.get_major()) == len(refs[0])
     assert len(ds.get_minor()) == len(refs[0])
@@ -270,6 +288,9 @@ if __name__ == "__main__":
 
     #//*** Initialize mixture model ***//
 #    randy = [random.choice([0,1,2,3]) for i in range(ds.GENOME_LENGTH)]
+    sys.stderr.write("Removing those too close to fixed point\n")
+    fixed_point = ds.get_consensus()
+    refs,dmat = del_close_to_fixed_point(fixed_point,MIN_D,refs,dmat)
     mms = MixtureModelSampler(refs=refs,dmat=dmat)
 
     #//*** Sample ***//
