@@ -14,6 +14,8 @@ def approx(a,b,eps=0.000001):
         return True
     return False
 
+# TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; could make them be unknowns
+
 class MixtureModel():
     def __init__(self, rd, gamma0, gamma1, consensus, pi, initstr):
         self.set_g1(gamma1)
@@ -89,25 +91,25 @@ class MixtureModel():
         # Case 3: no new parameters have been proposed that trigger full recalculation
         if self.initialized:
             # Case 3.a: no new parameters have been proposed at all; just return 
-            if None == newb == i:
+            if None == newbs == newis:
                 assert self.llc.L != None, "State has been wiped and likelihood requested without recalculation!"
                 return self.llc.L
             # Case 3.b: new base and old base are the same
             else:
                 oldbs = [self.st[i] for i in newis]
-                if all(newbs == oldbs):
+                if newbs == oldbs:
                     return self.llc.L                
             # Case 3.c: new base at position i has been proposed; fast recalculation performed
                 else:
                     # Case 3.c.1: new base at position i has been proposed but it is the same as the old one; don't recompute
                     ll = self.llc.update_loglikelihood(ds,newst,newis,newbs,oldbs,self.logg1, self.log1mg1, self.logpi, self.log1mpi)
-                    for j,newi in newis:
+                    for j,newi in enumerate(newis):
                         self.st[newi] = newbs[j]
                     return ll
 
         # Now perform a full recalculation
         assert not self.initialized, "State is initialized but a full recomputation is requested! Bug."
-        assert newb == None, "Full recomputation requested but new base also requested. Bug."
+        assert newbs == None, "Full recomputation requested but new base also requested. Bug."
         res = self.llc.cal_full_loglikelihood(ds, self.logg0, self.log1mg0, self.logg1, self.log1mg1, self.logpi, self.log1mpi)
         assert self.llc.L != None
         self.initialized = True
@@ -199,11 +201,11 @@ class LogLikelihoodCalculator():
             newb: new base.
         """
         #logger.warning("\tupdating ll %d %d %d %f %f %f %f" % (newi, newb, oldb, logg1, log1mg1, logpi, log1mpi))
-        assert all(oldbs != newbs), "Loglikelihood update requested but no base was changed! Wasteful or a bug."
-        read_list = rd.pos2reads(newi)
-        for j, newi in newis:
+        assert oldbs != newbs, "Loglikelihood update requested but no base was changed! Wasteful or a bug."
+        for j, newi in enumerate(newis):
             newb = newbs[j]
             oldb = oldbs[j]
+            read_list = rd.pos2reads(newi)
             for ri in read_list: 
                 read = rd.X[ri]
                 #logger.warning("\tupdating read %d, curr likelihood %f" % (ri, self.margL[ri]))
