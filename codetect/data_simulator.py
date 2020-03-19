@@ -8,7 +8,7 @@ from read_data import *
 import math
 
 class DataSimulator(ReadData):
-    def __init__(self, N_READS, READ_LENGTH, GENOME_LENGTH, GAMMA, PI, D, MU, COVQ):
+    def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, D, MU, COVQ, TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None):
         """ Initialize data simulator class with parameters
         
         Args:
@@ -24,25 +24,32 @@ class DataSimulator(ReadData):
         # Initialize constants
         self.N_READS = N_READS
         self.READ_LENGTH = READ_LENGTH
-        self.GENOME_LENGTH = GENOME_LENGTH
         self.GAMMA = GAMMA
         self.MU = MU
         self.PI = PI
         self.D = D
         # Simulate a population
         sys.stderr.write("Generating population\n")
-        self.major, self.minor = self.gen_pair(GENOME_LENGTH, D)
-        assert ham(self.major,self.minor) == self.D
+        if TEMPLATE_SEQUENCES == None:
+            self.GENOME_LENGTH = GENOME_LENGTH
+            self.major, self.minor = self.gen_pair(GENOME_LENGTH, D)
+            assert ham(self.major,self.minor) == self.D
+        else:
+            sys.stderr.write("Picking a reference\n")
+            self.major, self.minor = self.pick_references(TEMPLATE_SEQUENCES, DMAT, D)
+            sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
+            self.GENOME_LENGTH = len(self.major)
+#            assert ham(self.major,self.minor) >= self.D
         self.majorpop = self.gen_population(self.major, self.MU)
         self.minorpop = self.gen_population(self.minor, self.MU)
         minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
         majorhams = [ham(self.major, s) for s in self.majorpop[0]]
-        plt.bar(x=majorhams, height=self.majorpop[1])
-        plt.title("majorhams")
-        plt.show()                   
-        plt.bar(x=minorhams, height=self.minorpop[1])
-        plt.title("minorhams")
-        plt.show()
+#        plt.bar(x=majorhams, height=self.majorpop[1])
+#        plt.title("majorhams")
+#        plt.show()                   
+#        plt.bar(x=minorhams, height=self.minorpop[1])
+#        plt.title("minorhams")
+#        plt.show()
         self._MAJOR = self.major
         self._MINOR = self.minor
         # Simulate reads
@@ -234,6 +241,30 @@ class DataSimulator(ReadData):
         hams = [ham(ms, ref) for ms in minorseqs]
         return minorseqs + [ref], props
 
+    def pick_references(self,refs, dmat, D):
+        """Generate a pair of sequence representing the center of two clusters using references.
+    
+        Args:
+            refs: reference strings to pick from.
+            dmat: distance matrix specifying distances between references.
+            D: minimum distance between them.
+        """
+        mj = None
+        while (mj == None) or (mj == mi):
+            mi = random.randint(0,len(refs)-1)
+            row = dmat[mi]
+            possinds = np.where(row <= D)[0]
+            if len(possinds) > 0:
+                mj = random.choice(possinds)
+        return mutate_n(refs[mi],2), mutate_n(refs[mj],2)
+
+    def mutate_n(self,seq,n):
+        newseq = [c for c in seq]
+        mutpos = np.random.choice(len(major), n, replace=False)
+        for j in mutpos:
+            newseq[j] = random.choice([c for c in range(4) if c != seq[j]])
+        return newseq
+
     def gen_pair(self,L,D):
         """
         Generate a pair of sequences representing the center of two clusters.
@@ -244,10 +275,7 @@ class DataSimulator(ReadData):
         """
         # Mutates by a fixed number
         major = [random.choice(range(4)) for i in range(self.GENOME_LENGTH)]
-        minor = [c for c in major]
-        mutpos = np.random.choice(len(major), D, replace=False)
-        for j in mutpos:
-            minor[j] = random.choice([c for c in range(4) if c != major[j]])
+        minor = mutate_n(major,D)
         return major,minor
 
     def gen_aln(self,i,randpos, seq):

@@ -39,9 +39,9 @@ class ReadData():
         self.V_INDEX = self.build_Vindex()
         sys.stderr.write("Generating starting matrix M\n")
         # Build M matrix
-        self.M = self.reads2mat()
+        self.C, self.M = self.reads2mats()
         # Recompute consensus to be actual consensus
-        self._CONSENSUS = (np.argmax(v) for v in self.M)
+        self._CONSENSUS = tuple(np.argmax(v) for v in self.M)
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
@@ -101,22 +101,24 @@ class ReadData():
 
     def build_Vindex(self): 
         """ Build a reference pos with c -> reads mapping to pos index. """
-        Vindex = [[[] for c in range(4)] for i in range(len(self._reference))]
+        Vindex = [[[] for c in range(5)] for i in range(len(self._reference))]
         for i,Xi in enumerate(self.X):
             for pos, c in Xi.get_aln():
                 Vindex[pos][c].append(i)
         return Vindex
        
-    def reads2mat(self):
+    def reads2mats(self):
         """ Build a per position base frequency dist matrix """
-        mat = np.zeros(shape=(len(self._reference),4))
+        mat = np.zeros(shape=(len(self._reference),5))
+        Cmat = np.zeros(shape=(len(self._reference),5))
         for i, Xi in enumerate(self.X):
             for pos,c in Xi.get_aln():
                 mat[pos,c] += Xi.count
+                Cmat[pos,c] += Xi.count
         for ri in range(len(mat)):
             if sum(mat[ri]) > 0:
                 mat[ri] /= sum(mat[ri])
-        return mat
+        return Cmat, mat
 
     def get_indices(self,t=0.97,mindepth=20):
         """ Mask uninteresting positions of the matrix. """
