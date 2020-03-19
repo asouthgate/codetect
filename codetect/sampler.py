@@ -92,9 +92,8 @@ class MixtureModelSampler():
         """
         nmuts = 0
         ntotal = 0
-        C = rd.C
-        for ri,row in enumerate(C):
-            if max(M) > t:
+        for ri,row in enumerate(rd.C):
+            if max(rd.M) > t:
                 nmuts += (sum(row)-max(row))
                 ntotal += sum(row)
         return nmuts/ntotal               
