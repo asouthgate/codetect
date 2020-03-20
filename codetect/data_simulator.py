@@ -7,7 +7,7 @@ import copy
 from read_aln_data import *
 import math
 
-class DataSimulator(ReadData):
+class DataSimulator(ReadAlnData):
     def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, D, MU, COVQ, TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None):
         """ Initialize data simulator class with parameters
         
