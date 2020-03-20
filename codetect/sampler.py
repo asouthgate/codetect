@@ -1,11 +1,10 @@
 import random
 import numpy as np
-import math
 import matplotlib.pyplot as plt
 from likelihood_cache import MixtureModel
 from log import logger
 import logging
-from utils import *
+from utils import ham, logsumexp
 
 class RefPropDist():
     def __init__(self, dmat):
@@ -59,14 +58,15 @@ class MixtureModelSampler():
             self.ref_prop_dist = RefPropDist(dmat)
             assert len(refs) == len(dmat)
             assert initstring is None, "Do not provide an initstring when reference sampling"
-            self.refi = random.randint(0,len(refs)-1)
-            initstring = refs[self.refi]
+            self.init_refi = random.randint(0,len(refs)-1)
+            initstring = refs[self.init_refi]
 
         # Initialized states used for Gibbs sampling
         if allowed_states is not None:
             assert not self.sample_refs, "Currently ref MH+gibbs is disabled. It may not be mathematically valid. Fixed+gibbs is allowed, however."
             # Also perform Gibbs sampling        
-            self.allowed_states = allowed
+            self.allowed_states = allowed_states
+            assert len(allowed_states) == len(fixed_point), "Allowed states is not like allowed sites; it is indexed relative to the alignment"
             self.allowed_positions = allowed_positions
             self.sample_strings_gibbs = True
 
@@ -77,6 +77,7 @@ class MixtureModelSampler():
             init_gamma1 = random.uniform(0.0001, 0.02)
         else:
             est_gamma = self.point_estimate_gamma(rd)
+            init_gamma0 = init_gamma1 = est_gamma
             sys.stderr.write("Point estimated gamma as %f\n" % est_gamma)
 
         # Initialize pi; always estimate pi
@@ -182,7 +183,7 @@ class MixtureModelSampler():
         u = random.uniform(0,1)
         # TODO: SLOW: FIX
         # TODO: add prior
-        assert self.mm.st == self.refs[curr_refi]
+        assert ham(self.mm.st, self.refs[curr_refi]) == 0, ham(self.mm.st, self.refs[curr_refi])
         # Factor is the log probability of the hastings ratio (proposal coefficient)
         deno = self.mm.cal_loglikelihood(rd)
         prop_refi,curris,currbs,propis,propbs,factor = self.propose_ref_st(self.mm.st,curr_refi)
@@ -218,9 +219,9 @@ class MixtureModelSampler():
         choice = np.random.choice(self.allowed_states[i],p=pmf)        
         ll = self.mm.cal_loglikelihood(ds,newis=[i],newbs=[choice])
         if choice != oldb:
-            logger.warning("new b accepted", choice, oldb, ll)
+            logger.warning("new b accepted=%s,old=%s,ll=%f" % (choice, oldb, ll))
         else:
-            logger.warning("new b rejected", choice, oldb, ll)
+            logger.warning("new b rejected=%s,old=%s,ll=%f" % (choice, oldb, ll))
         return choice
 
     def constrained_sample_string(self,ds, refstr, curr_ref_diffs, max_ref_dist=3):
@@ -257,17 +258,21 @@ class MixtureModelSampler():
         g0 = self.mm.g0
         g1 = self.mm.g1
         st0 = self.mm.st
-        refstr = st0
+        refstr = tuple([c for c in st0])
         curr_ref_diffs = set()
-        refi = 0
+        sampreflog = ""
+        if self.sample_refs:
+            refi = self.init_refi
         for nit in range(nits):
             currL = self.mm.cal_loglikelihood(ds)
-            sys.stderr.write("i=%d,L=%f,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, pi, g0, g1))
+            sys.stderr.write("i=%d,L=%f,%scurrpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, sampreflog, pi, g0, g1))
             if self.sample_refs:
                 refi = self.mh_reference_sample(ds, refi)
                 refstr = self.refs[refi]
                 st0 = self.mm.st
+                sampreflog = "sampref=%d," % refi
             if self.sample_strings_gibbs:
+                assert not self.sample_refs, "Only ref sampling OR gibbs is allowed currently."
                 st0,curr_ref_diffs = self.constrained_sample_string(ds, refstr, curr_ref_diffs) 
             if self.sample_gammas:
                 pi,g0,g1 = self.mh_sample_normal(ds)
@@ -320,8 +325,9 @@ def del_close_to_fixed_point(fixed_point,mind,refs,dmat):
         else:
             inds2del.append(ri)
     inds2del = np.array(inds2del)
-    dmat = np.delete(dmat,inds2del,0)
-    dmat = np.delete(dmat,inds2del,1)
+    if len(inds2del) > 0:
+        dmat = np.delete(dmat,inds2del,0)
+        dmat = np.delete(dmat,inds2del,1)
     assert len(new_refs) == dmat.shape[0] == dmat.shape[1], (len(new_refs), dmat.shape, len(inds2del))
     return new_refs, dmat
 
@@ -332,7 +338,7 @@ if __name__ == "__main__":
     if "--debug" not in sys.argv:
         logging.disable(logging.CRITICAL)
     c2i = {"A":0, "C":1, "G":2, "T":3, "-":4, "M":4, "R":4, "Y":4, "S":4, "K":4, "W":4, "V":4, "H":4, "N":4, "X":4}
-    refs = [[c2i[c.upper()] for c in str(r.seq)] for r in SeqIO.parse(sys.argv[1], "fasta")]
+    refs = [tuple([c2i[c.upper()] for c in str(r.seq)]) for r in SeqIO.parse(sys.argv[1], "fasta")]
     dmat = np.load(sys.argv[2])
     # TODO: SLOW: FIX FOR IMPORT
     for i in range(len(dmat)-1):
@@ -373,7 +379,7 @@ if __name__ == "__main__":
     refs,dmat = del_close_to_fixed_point(fixed_point,MIN_D,refs,dmat)
 
     #//*** Initialize mixture model ***//
-    mms = MixtureModelSampler(ds,ds.get_consensus(),initstring=ds.get_minor(),dmat=dmat)
+    mms = MixtureModelSampler(ds,ds.get_consensus(),refs=refs,dmat=dmat)
 
     #//*** Sample ***//
     strings,params,Ls = mms.sample(ds,nits=1000)

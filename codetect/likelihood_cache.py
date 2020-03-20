@@ -1,18 +1,7 @@
 import numpy as np
 import math      
+from utils import *
 from log import logger
-
-def logsumexp(logls):
-    m = max(logls)
-    sumo = 0
-    for l in logls:
-        sumo += np.exp(l-m)
-    return m + np.log(sumo) 
-
-def approx(a,b,eps=0.000001):
-    if math.fabs(a-b) < eps:
-        return True
-    return False
 
 # TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; could make them be unknowns
 
@@ -108,12 +97,13 @@ class MixtureModel():
                     return ll
 
         # Now perform a full recalculation
-        assert not self.initialized, "State is initialized but a full recomputation is requested! Bug."
         assert newbs == None, "Full recomputation requested but new base also requested. Bug."
         # Case 4.a: only pi changed; partial recalculation required
-        if newg0 == newg1 == None:
+        if newg0 == newg1 == None and newpi != None:
+#            assert self.initialized, "Attempting to calculate likelihood without fully calculating read likelihoods first!"
             res = self.llc.cal_pi_loglikelihood(ds, self.logpi, self.log1mpi)
         else:
+            assert not self.initialized, "State is initialized but a full recomputation is requested! Bug."
         # Case 4.b: pi, g0, g1 changes; full recalculation required
             res = self.llc.cal_full_loglikelihood(ds, self.logg0, self.log1mg0, self.logg1, self.log1mg1, self.logpi, self.log1mpi)
         assert self.llc.L != None
