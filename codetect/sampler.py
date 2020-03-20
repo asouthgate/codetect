@@ -30,7 +30,7 @@ class RefPropDist():
         return np.log(self.pmf[i,j])
 
 class MixtureModelSampler():
-    """ Samples from posterior of mixture model parameters. """
+    """ Samples from posterior of mixture model parameters."""
     def __init__(self,rd,fixed_point,initstring=None,allowed_states=None,allowed_positions=None,dmat=None,refs=None,sample_gammas=False):
         # TODO: split class; too many responsibilities; args should not have so many mutually exclusive groups
         """
