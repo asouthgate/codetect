@@ -1,21 +1,11 @@
 import random
 import numpy as np
 import math
-from scipy.special import beta
 import matplotlib.pyplot as plt
-from aln import ReadAln
-from likelihood_cache import *
+from likelihood_cache import MixtureModel
 from log import logger
 import logging
-import functools
-
-def ham(s1,s2):
-    return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
-
-def approx(a,b,eps=0.000001):
-    if math.fabs(a-b) < eps:
-        return True
-    return False
+from utils import *
 
 class RefPropDist():
     def __init__(self, dmat):
@@ -42,7 +32,7 @@ class RefPropDist():
 
 class MixtureModelSampler():
     """ Samples from posterior of mixture model parameters. """
-    def __init__(self,rd,fixed_point,initstring=None,allowed_states=None,allowed_positions=None,dmat=None,refs=None,fixed_gamma=None):
+    def __init__(self,rd,fixed_point,initstring=None,allowed_states=None,allowed_positions=None,dmat=None,refs=None,sample_gammas=False):
         # TODO: split class; too many responsibilities; args should not have so many mutually exclusive groups
         """
         Args:
@@ -56,7 +46,7 @@ class MixtureModelSampler():
             refs: references (used for reference sampling)
             fixed_gamma: a fixed gamma (used when estimation of gamma is not performed)
         """
-        self.sample_gammas = False
+        self.sample_gammas = sample_gammas
         self.sample_refs = False
         self.sample_strings_gibbs = False
 
@@ -81,7 +71,7 @@ class MixtureModelSampler():
             self.sample_strings_gibbs = True
 
         # Initialize gamma
-        if fixed_gamma is None:
+        if sample_gammas:
             self.sample_gammas = True
             init_gamma0 = random.uniform(0.0001, 0.02)
             init_gamma1 = random.uniform(0.0001, 0.02)
@@ -217,7 +207,7 @@ class MixtureModelSampler():
         assert currL != None
         oldb = self.mm.st[i]
         # Keep the last b calculated; nm array must be recomputed
-        for b in self.allowed[i]:
+        for b in self.allowed_states[i]:
             # TODO: speed up by 1/Nstates by not recomputing for the one it already is; PUT THAT IN FIRST
             ll = self.mm.cal_loglikelihood(ds,newis=[i],newbs=[b])
             logpmf.append(ll)
@@ -225,7 +215,7 @@ class MixtureModelSampler():
         deno = logsumexp(logpmf)
         logpmf -= deno
         pmf = np.exp(logpmf)
-        choice = np.random.choice(self.allowed[i],p=pmf)        
+        choice = np.random.choice(self.allowed_states[i],p=pmf)        
         ll = self.mm.cal_loglikelihood(ds,newis=[i],newbs=[choice])
         if choice != oldb:
             logger.warning("new b accepted", choice, oldb, ll)
@@ -233,27 +223,27 @@ class MixtureModelSampler():
             logger.warning("new b rejected", choice, oldb, ll)
         return choice
 
-    def constrained_sample_string(ds, refstr, curr_ref_diffs, max_ref_dist=3):
+    def constrained_sample_string(self,ds, refstr, curr_ref_diffs, max_ref_dist=3):
         for j in self.allowed_positions:
             if j in curr_ref_diffs:
                 # Even if we at the maximum dist, we can revert
-                assert refstr[j] != self.mm.st0[j]
-                choice = gibbs_sample_si(self,ds,i)
+                assert refstr[j] != self.mm.st[j]
+                choice = self.gibbs_sample_si(ds,i)
                 if choice == refstr[j]:
                     # If we have reverted, record that
-                    cur_ref_diffs.remove(j)
+                    curr_ref_diffs.remove(j)
             elif len(curr_ref_diffs) <= max_ref_dist:
-                assert refstr[j] == self.mm.st0[j]
+                assert refstr[j] == self.mm.st[j]
                 # Cannot accept a new state (zero prior outside max_ref_dist)
                 # Do nothing
                 pass
             else:
-                assert refstr[j] == self.mm.st0[j]
+                assert refstr[j] == self.mm.st[j]
                 # We are within a radius of max_ref_dist to our refstr
-                choice = gibbs_sample_si(self,ds,i)
+                choice = self.gibbs_sample_si(ds,i)
                 if choice != refstr[j]:
                     curr_ref_diffs.add(j)
-        return self.mm.st0, curr_ref_diffs
+        return self.mm.st, curr_ref_diffs
 
     def sample(self,rd,nits=300):
         """ Sample from the full posterior of the mixture model using references only.
@@ -266,16 +256,18 @@ class MixtureModelSampler():
         pi = self.mm.pi
         g0 = self.mm.g0
         g1 = self.mm.g1
-        st0 = self.mm.st0
+        st0 = self.mm.st
         refstr = st0
         curr_ref_diffs = set()
+        refi = 0
         for nit in range(nits):
             currL = self.mm.cal_loglikelihood(ds)
             sys.stderr.write("i=%d,L=%f,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, pi, g0, g1))
             if self.sample_refs:
-                st0 = self.mh_reference_sample(ds, refi)
-                refstr = st0
-            if self.sample_gibbs_strings:
+                refi = self.mh_reference_sample(ds, refi)
+                refstr = self.refs[refi]
+                st0 = self.mm.st
+            if self.sample_strings_gibbs:
                 st0,curr_ref_diffs = self.constrained_sample_string(ds, refstr, curr_ref_diffs) 
             if self.sample_gammas:
                 pi,g0,g1 = self.mh_sample_normal(ds)
@@ -353,10 +345,10 @@ if __name__ == "__main__":
     N_READS = 5000
     PI = 0.8
     GAMMA = 0.02
-    D = 2
+    D = 0
     MU = 0.000
     GAMMA_UPPER = 0.04
-    MIN_D = 10
+    MIN_D = 0
     ds = DataSimulator(N_READS,READ_LENGTH,GAMMA,PI,D,MU,1,TEMPLATE_SEQUENCES=refs,DMAT=dmat)
     assert len(ds.get_major()) == len(refs[0])
     assert len(ds.get_minor()) == len(refs[0])
@@ -367,21 +359,24 @@ if __name__ == "__main__":
 #    ds.filter(0.90)
 
     #//*** Preprocess dataset ***//
-    allowed=[]
+    # Get allowed sites and allowed bases at each site
+    allowed_bases=[]
+    allowed_sites=ds.VALID_INDICES
     states_per_site = 2
     for m in ds.M:
-        allowed.append(sorted(np.argsort(m)[-states_per_site:]))
-        assert len(allowed[-1]) > 0
+        allowed_bases.append(sorted(np.argsort(m)[-states_per_site:]))
+        assert len(allowed_bases[-1]) > 0
 
-    #//*** Initialize mixture model ***//
-#    randy = [random.choice([0,1,2,3]) for i in range(ds.GENOME_LENGTH)]
+    # Delete references too close to the consensus (taken as fixed point)
     sys.stderr.write("Removing those too close to fixed point\n")
     fixed_point = ds.get_consensus()
     refs,dmat = del_close_to_fixed_point(fixed_point,MIN_D,refs,dmat)
-    mms = MixtureModelSampler(ds,ds.get_consensus(),initstring=ds.get_minor(),dmat=dmat,estimate_gamma=False)
+
+    #//*** Initialize mixture model ***//
+    mms = MixtureModelSampler(ds,ds.get_consensus(),initstring=ds.get_minor(),dmat=dmat)
 
     #//*** Sample ***//
-    strings,params,Ls = mms.sample_refs(ds,nits=1000)
+    strings,params,Ls = mms.sample(ds,nits=1000)
     plt.plot(Ls)
     plt.show()
 
