@@ -42,34 +42,62 @@ class RefPropDist():
 
 class MixtureModelSampler():
     """ Samples from posterior of mixture model parameters. """
-    def __init__(self,rd,fixed_point,initstring=None,allowed=None,dmat=None,refs=None,estimate_refs=True,estimate_gamma=True):
+    def __init__(self,rd,fixed_point,initstring=None,allowed_states=None,allowed_positions=None,dmat=None,refs=None,fixed_gamma=None):
+        # TODO: split class; too many responsibilities; args should not have so many mutually exclusive groups
         """
         Args:
-            initstring: initialization string.
-            allowed: allowed states for each position
+            rd: ReadData object
+            fixed_point: specified sequence for zeroth cluster 
+        Optional Args:
+            initstring: initialization string
+            allowed_positions: positions where the string can vary from any reference (used for Gibbs string sampling)
+            allowed_states: allowed states for each position (used for Gibbs string sampling)
+            dmat: distance matrix for references (used for reference sampling)
+            refs: references (used for reference sampling)
+            fixed_gamma: a fixed gamma (used when estimation of gamma is not performed)
         """
+        self.sample_gammas = False
+        self.sample_refs = False
+        self.sample_strings_gibbs = False
+
+        # Initialize references used for reference sampling
         if dmat is not None:
-            self.ref_prop_dist = RefPropDist(dmat)
+            # Estimate given references
+            assert refs is not None
+            self.sample_refs = True
             self.refs = refs
+            self.ref_prop_dist = RefPropDist(dmat)
             assert len(refs) == len(dmat)
+            assert initstring is None, "Do not provide an initstring when reference sampling"
             self.refi = random.randint(0,len(refs)-1)
             initstring = refs[self.refi]
-        if not estimate_refs:
-            self.estimate_refs = False
-            assert len(refs) == 1, "If not estimating refs, must provide only one ref"
-        if estimate_gamma:
-            self.fixed_gamma = None
-            self.mm = MixtureModel(rd, random.uniform(0.0001,0.02), random.uniform(0.0001, 0.02), fixed_point, random.uniform(0.5,1.0), initstring)
+
+        # Initialized states used for Gibbs sampling
+        if allowed_states is not None:
+            # Also perform Gibbs sampling        
+            self.allowed_states = allowed
+            self.allowed_positions = allowed_positions
+            self.sample_strings_gibbs = True
+
+        # Initialize gamma
+        if fixed_gamma is None:
+            self.sample_gammas = True
+            init_gamma0 = random.uniform(0.0001, 0.02)
+            init_gamma1 = random.uniform(0.0001, 0.02)
         else:
             est_gamma = self.point_estimate_gamma(rd)
             sys.stderr.write("Point estimated gamma as %f\n" % est_gamma)
-            self.fixed_gamma = est_gamma
-            self.mm = MixtureModel(rd, est_gamma, est_gamma, fixed_point, random.uniform(0.5,1.0), initstring)
-            self.mm.cal_loglikelihood(rd)
+
+        # Initialize pi; always estimate pi
+        self.estimate_pi = True
+        init_pi = random.uniform(0.5,1.0)
+
+        # Build model
+        self.mm = MixtureModel(rd, init_gamma0, init_gamma1, fixed_point, init_pi, initstring)
+        self.mm.cal_loglikelihood(rd)
         self.sample_strings = []
         self.sample_params = []
         self.sample_Ls = []
-        self.allowed = allowed
 
     def point_estimate_gamma(self,rd,t=0.95):
         """ Point estimate gamma 
@@ -111,6 +139,7 @@ class MixtureModelSampler():
         logger.warning("rejecting %f %f %f" % (proppi,propg0,propg1))
         self.mm.cal_loglikelihood(rd,newpi=curr_pi,newg0=curr_g0,newg1=curr_g1)
         return curr_pi, curr_g0, curr_g1
+
     def mh_sample_normal_onlypi(self,rd,sigma_pi=0.01):
         """ Sample pi using Metropolis-Hastings. 
         
@@ -161,6 +190,7 @@ class MixtureModelSampler():
     def mh_reference_sample(self,rd,curr_refi):
         u = random.uniform(0,1)
         # TODO: SLOW: FIX
+        # TODO: add prior
         assert self.mm.st == self.refs[curr_refi]
         # Factor is the log probability of the hastings ratio (proposal coefficient)
         deno = self.mm.cal_loglikelihood(rd)
@@ -172,6 +202,7 @@ class MixtureModelSampler():
         else:
             self.mm.cal_loglikelihood(rd,newis=curris,newbs=currbs)
             return curr_refi
+
     def gibbs_sample_si(self,ds,i):
         """ Sample a new base at position i using full conditional probability.
 
@@ -217,7 +248,8 @@ class MixtureModelSampler():
         for nit in range(nits):
             currL = self.mm.cal_loglikelihood(ds)
             sys.stderr.write("i=%d,L=%f,refi=%d,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, refi, pi, g0,  g1))
-            refi = self.mh_reference_sample(ds, refi)
+            if self.estimate_refs:
+                refi = self.mh_reference_sample(ds, refi)
             if self.fixed_gamma is None:
                 pi,g0,g1 = self.mh_sample_normal(ds)
             else:
@@ -319,7 +351,7 @@ if __name__ == "__main__":
     sys.stderr.write("Removing those too close to fixed point\n")
     fixed_point = ds.get_consensus()
     refs,dmat = del_close_to_fixed_point(fixed_point,MIN_D,refs,dmat)
-    mms = MixtureModelSampler(ds,ds.get_consensus(),refs=refs,dmat=dmat,estimate_gamma=False)
+    mms = MixtureModelSampler(ds,ds.get_consensus(),initstring=ds.get_minor(),dmat=dmat,estimate_gamma=False)
 
     #//*** Sample ***//
     strings,params,Ls = mms.sample_refs(ds,nits=1000)
