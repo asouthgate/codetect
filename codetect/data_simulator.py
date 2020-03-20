@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from  em import *
 from aln import ReadAln
 import copy
-from read_data import *
+from read_aln_data import *
 import math
 
 class DataSimulator(ReadData):
