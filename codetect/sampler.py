@@ -74,6 +74,7 @@ class MixtureModelSampler():
 
         # Initialized states used for Gibbs sampling
         if allowed_states is not None:
+            assert not self.sample_refs, "Currently ref MH+gibbs is disabled. It may not be mathematically valid. Fixed+gibbs is allowed, however."
             # Also perform Gibbs sampling        
             self.allowed_states = allowed
             self.allowed_positions = allowed_positions
@@ -232,7 +233,29 @@ class MixtureModelSampler():
             logger.warning("new b rejected", choice, oldb, ll)
         return choice
 
-    def sample_refs(self,rd,nits=300):
+    def constrained_sample_string(ds, refstr, curr_ref_diffs, max_ref_dist=3):
+        for j in self.allowed_positions:
+            if j in curr_ref_diffs:
+                # Even if we at the maximum dist, we can revert
+                assert refstr[j] != self.mm.st0[j]
+                choice = gibbs_sample_si(self,ds,i)
+                if choice == refstr[j]:
+                    # If we have reverted, record that
+                    cur_ref_diffs.remove(j)
+            elif len(curr_ref_diffs) <= max_ref_dist:
+                assert refstr[j] == self.mm.st0[j]
+                # Cannot accept a new state (zero prior outside max_ref_dist)
+                # Do nothing
+                pass
+            else:
+                assert refstr[j] == self.mm.st0[j]
+                # We are within a radius of max_ref_dist to our refstr
+                choice = gibbs_sample_si(self,ds,i)
+                if choice != refstr[j]:
+                    curr_ref_diffs.add(j)
+        return self.mm.st0, curr_ref_diffs
+
+    def sample(self,rd,nits=300):
         """ Sample from the full posterior of the mixture model using references only.
         
         Args:
@@ -240,22 +263,26 @@ class MixtureModelSampler():
         Optional Args:
             nits: number of samples.
         """
-        consensus = ds.get_consensus()
         pi = self.mm.pi
         g0 = self.mm.g0
         g1 = self.mm.g1
-        refi = self.refi
+        st0 = self.mm.st0
+        refstr = st0
+        curr_ref_diffs = set()
         for nit in range(nits):
             currL = self.mm.cal_loglikelihood(ds)
-            sys.stderr.write("i=%d,L=%f,refi=%d,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, refi, pi, g0,  g1))
-            if self.estimate_refs:
-                refi = self.mh_reference_sample(ds, refi)
-            if self.fixed_gamma is None:
+            sys.stderr.write("i=%d,L=%f,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, pi, g0, g1))
+            if self.sample_refs:
+                st0 = self.mh_reference_sample(ds, refi)
+                refstr = st0
+            if self.sample_gibbs_strings:
+                st0,curr_ref_diffs = self.constrained_sample_string(ds, refstr, curr_ref_diffs) 
+            if self.sample_gammas:
                 pi,g0,g1 = self.mh_sample_normal(ds)
             else:
                 pi = self.mh_sample_normal_onlypi(ds)
             self.sample_params.append([pi,g0,g1])
-            self.sample_strings.append(self.refs[refi]) 
+            self.sample_strings.append(st0) 
             self.sample_Ls.append(currL)
         return self.sample_strings, self.sample_params, self.sample_Ls
 
