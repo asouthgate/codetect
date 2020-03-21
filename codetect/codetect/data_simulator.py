@@ -8,7 +8,7 @@ from read_aln_data import *
 import math
 
 class DataSimulator(ReadAlnData):
-    def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, D, MU, COVQ, TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None):
+    def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, D, MU, COVQ, PAIRED_END=False,TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None):
         """ Initialize data simulator class with parameters
         
         Args:
@@ -278,7 +278,7 @@ class DataSimulator(ReadAlnData):
         minor = mutate_n(major,D)
         return major,minor
 
-    def gen_aln(self,i,randpos, seq):
+    def gen_aln(self,i,randpos, seq, paired_end, insert_size=350):
         """ 
         Generate a random read alignment.
     
@@ -286,11 +286,15 @@ class DataSimulator(ReadAlnData):
             i: number.
             randpos: random position of the alignment.
             seq: base sequence.
+            paired_end: whether to generate a second alignment.
 
         Returns:
             A ReadAln object.
         """
         sampinds = [randpos+l for l in range(self.READ_LENGTH)]
+        if paired_end:
+            if randpos + insert_size + self.READ_LENGTH <= self.GENOME_LENGTH:
+                sampinds += [randpos+l+insert_size for l in range(self.READ_LENGTH)]
         aln = ReadAln(i)
         for si in sampinds:
             roll = random.uniform(0,1)
@@ -302,7 +306,7 @@ class DataSimulator(ReadAlnData):
                 aln.append_mapped_base(si,c)                    
         return aln
 
-    def sample_reads(self):
+    def sample_reads(self, paired_end=False):
         """
         Sample a set of reads, currently using internal state (member variables).
 
@@ -320,7 +324,7 @@ class DataSimulator(ReadAlnData):
             seqi = np.random.choice(range(len(popseqs)), p=popfreqs)
             seq = popseqs[seqi]
             randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
-            aln = self.gen_aln(i,randpos,seq)
+            aln = self.gen_aln(i,randpos,seq,paired_end)
             aln.z = seqi
             X.append(aln)
         return X
@@ -338,6 +342,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_iterations", required=True, type=int)
     parser.add_argument("--min_mixture_distance", required=True, type=int)
     parser.add_argument("--mu", required=True, type=float)
+    parser.add_argument("--paired_end", required=False, action="store_true", default=False)
     parser.add_argument("--debug_plot", required=False, action="store_true", default=False)
     args = parser.parse_args()
 
@@ -352,7 +357,7 @@ if __name__ == "__main__":
     MU = args.mu
     COVQ = args.covq
 
-    ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D,MU,COVQ) 
+    ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D,MU,COVQ,PAIRED_END=args.paired_end) 
     sys.stderr.write("Simulating dataset with parameters:\n")
     sys.stderr.write("GENOME_LENGTH=%d\n" % L)
     sys.stderr.write("PI=%f\n" % PI)
@@ -364,17 +369,4 @@ if __name__ == "__main__":
     sys.stderr.write("D=%d\n" % D)
     sys.stderr.write("EPS=%d\n" % EPS)
 
-#    em = EM(ds.X, ds.M, ds.V_INDEX, ds.get_consensus(), EPS)
-    ems = []
-    for l in range(1):
-        em = EM(ds, EPS)
-        ll,b,st,Tt = em.do2(NITS, random_init=False, debug=args.debug_plot)
-        llo,bo,sto,Tto = em.do_one_cluster(5,  debug=args.debug_plot)
-        AIC_cluster = 2.5*len(ds.VALID_INDICES) - 2*ll
-        AIC_one = -2*llo 
-        print("LIKELIHOODS", ll, llo)
-        print("AICS", AIC_cluster, AIC_one, AIC_cluster-AIC_one)
-        if AIC_cluster < AIC_one:
-            print("AIC SAYS coinfection!")
-        else:
-            print("AIC SAYS NO COINFECTION!")
+    ds.
