@@ -89,8 +89,7 @@ class DataSimulator(ReadAlnData):
                     baseweights[k,rib] += T[ri,1]
                     totalTk += T[ri,1]
             baseweights[k] /= totalTk
-        return baseweights
-   
+        return baseweights   
 
     def random_coverage_walk(self,covq):
         """
@@ -231,16 +230,6 @@ class DataSimulator(ReadAlnData):
                 aln.append_mapped_base(si,c)                    
         return aln
 
-    def write_reads(self, opref):
-        pairs = [aln.get_fq_entry_pair() for aln in self.X]
-        fwd,rev = zip(*pairs)
-        with open(opref + ".1.fq", "w") as of1:
-            for l in fwd:
-                of1.write(l)
-        with open(opref + ".2.fq", "w") as of2:
-            for l in rev:
-                of2.write(l)        
-
     def sample_reads(self, paired_end):
         """
         Sample a set of reads, currently using internal state (member variables).
@@ -263,8 +252,25 @@ class DataSimulator(ReadAlnData):
             X.append(aln)
         return X
 
+def write_reads(ds, opref):
+    pairs = [aln.get_fq_entry_pair() for aln in ds.X]
+    fwd,rev = zip(*pairs)
+    with open(opref + ".1.fq", "w") as of1:
+        for l in fwd:
+            of1.write(l)
+    with open(opref + ".2.fq", "w") as of2:
+        for l in rev:
+            of2.write(l)        
+
+def write_refs(ds, opref):
+    with open(opref + ".major.fa", "w") as of1:
+        of1.write(">major\n"+"".join(["ACGT"[c] for c in ds.major if c != 4]))
+    with open(opref + ".minor.fa", "w") as of2:
+        of2.write(">minor\n"+"".join(["ACGT"[c] for c in ds.major if c != 4]))
+
 if __name__ == "__main__":
     import argparse 
+    from Bio import SeqIO
     # Usage e.g.
     # python3.7 
     parser = argparse.ArgumentParser(description="Detect Coinfection!")
@@ -277,23 +283,15 @@ if __name__ == "__main__":
     parser.add_argument("--mu", required=True, type=float)
     parser.add_argument("--refs", required=True)
     parser.add_argument("--dmat", required=True)
-#    parser.add_argument("--n_ref_snps", required=True, type=float)
     parser.add_argument("--paired_end", required=False, action="store_true", default=False)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
-    from Bio import SeqIO
+    # TODO: record headers as well
     refs = [[c2i[c] for c in str(r.seq).upper()] for r in SeqIO.parse(args.refs, "fasta")]
     dmat = np.load(args.dmat)
 
-    PI = args.pi
-    D = args.D
-    GAMMA = args.gamma
-    READLEN = args.read_length
-    NREADS = args.n_reads
-    MU = args.mu
-    COVQ = args.covq
-
-    ds = DataSimulator(NREADS,READLEN,GAMMA,PI,D,MU,COVQ,PAIRED_END=args.paired_end,TEMPLATE_SEQUENCES=refs, DMAT=dmat) 
-    ds.write_reads(args.out)
+    ds = DataSimulator(args.n_reads,args.read_length,args.gamma,args.pi,args.D,args.mu,args.covq,PAIRED_END=args.paired_end,TEMPLATE_SEQUENCES=refs, DMAT=dmat) 
+    write_reads(ds,args.out)
+    write_refs(ds,args.out)
 
