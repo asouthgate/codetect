@@ -1,11 +1,11 @@
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from  em import *
 from aln import ReadAln
 import copy
 from read_aln_data import *
 import math
+from utils import *
 
 class DataSimulator(ReadAlnData):
     def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, D, MU, COVQ, PAIRED_END=False,TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None):
@@ -55,14 +55,14 @@ class DataSimulator(ReadAlnData):
         # Simulate reads
         sys.stderr.write("Simulating reads\n")
         self.COVWALK = self.random_coverage_walk(COVQ)
-        self.X = self.sample_reads()
+        self.X = self.sample_reads(PAIRED_END)
         # Parse data into a ReadData object
-        super(DataSimulator,self).__init__(self.X,self._MAJOR)
+#        super(DataSimulator,self).__init__(self.X,self._MAJOR)
         # In case the number of reads has changed (some have been deleted:)
-        self.N_READS = sum([Xi.count for Xi in self.X])
+#        self.N_READS = sum([Xi.count for Xi in self.X])
         # Guarantee that the consensus has the highest for each
-        for ci, c in enumerate(self.get_consensus()):
-            assert max(self.M[ci]) == self.M[ci][c], (self.M[ci], c)
+#        for ci, c in enumerate(self.get_consensus()):
+#            assert max(self.M[ci]) == self.M[ci][c], (self.M[ci], c)
 
     def get_minor(self):
         return self._MINOR
@@ -275,10 +275,10 @@ class DataSimulator(ReadAlnData):
         """
         # Mutates by a fixed number
         major = [random.choice(range(4)) for i in range(self.GENOME_LENGTH)]
-        minor = mutate_n(major,D)
+        minor = self.mutate_n(major,D)
         return major,minor
 
-    def gen_aln(self,i,randpos, seq, paired_end, insert_size=350):
+    def gen_aln(self,i, seq, paired_end, insert_size=350):
         """ 
         Generate a random read alignment.
     
@@ -291,10 +291,15 @@ class DataSimulator(ReadAlnData):
         Returns:
             A ReadAln object.
         """
-        sampinds = [randpos+l for l in range(self.READ_LENGTH)]
         if paired_end:
-            if randpos + insert_size + self.READ_LENGTH <= self.GENOME_LENGTH:
-                sampinds += [randpos+l+insert_size for l in range(self.READ_LENGTH)]
+            maxind = len(seq)-(2*self.READ_LENGTH+insert_size)+1
+            trunc_covwalk = self.COVWALK[:maxind]/sum(self.COVWALK[:maxind])
+            randpos = np.random.choice(range(maxind), p=trunc_covwalk)
+            sampinds = [randpos+l for l in range(self.READ_LENGTH)]
+            sampinds += [randpos+self.READ_LENGTH+insert_size+l for l in range(self.READ_LENGTH)]
+        else:
+            randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
+            sampinds = [randpos+l for l in range(self.READ_LENGTH)]
         aln = ReadAln(i)
         for si in sampinds:
             roll = random.uniform(0,1)
@@ -306,7 +311,17 @@ class DataSimulator(ReadAlnData):
                 aln.append_mapped_base(si,c)                    
         return aln
 
-    def sample_reads(self, paired_end=False):
+    def write_reads(self, opref):
+        pairs = [aln.get_fq_entry_pair() for aln in self.X]
+        fwd,rev = zip(*pairs)
+        with open(opref + ".1.fq", "w") as of1:
+            for l in fwd:
+                of1.write(l)
+        with open(opref + ".2.fq", "w") as of2:
+            for l in rev:
+                of2.write(l)        
+
+    def sample_reads(self, paired_end):
         """
         Sample a set of reads, currently using internal state (member variables).
 
@@ -323,14 +338,15 @@ class DataSimulator(ReadAlnData):
             popseqs, popfreqs = pops[seqi]
             seqi = np.random.choice(range(len(popseqs)), p=popfreqs)
             seq = popseqs[seqi]
-            randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
-            aln = self.gen_aln(i,randpos,seq,paired_end)
+            aln = self.gen_aln(i,seq,paired_end)
             aln.z = seqi
             X.append(aln)
         return X
 
 if __name__ == "__main__":
     import argparse 
+    # Usage e.g.
+    # python3.7 
     parser = argparse.ArgumentParser(description="Detect Coinfection!")
     parser.add_argument("--pi", required=True, type=float)
     parser.add_argument("--D", required=True, type=int)
@@ -338,35 +354,26 @@ if __name__ == "__main__":
     parser.add_argument("--n_reads", required=True, type=int)
     parser.add_argument("--covq", required=True, type=int)
     parser.add_argument("--read_length", required=True, type=int)
-    parser.add_argument("--genome_length", required=True, type=int)
-    parser.add_argument("--n_iterations", required=True, type=int)
-    parser.add_argument("--min_mixture_distance", required=True, type=int)
     parser.add_argument("--mu", required=True, type=float)
+    parser.add_argument("--refs", required=True)
+    parser.add_argument("--dmat", required=True)
+#    parser.add_argument("--n_ref_snps", required=True, type=float)
     parser.add_argument("--paired_end", required=False, action="store_true", default=False)
-    parser.add_argument("--debug_plot", required=False, action="store_true", default=False)
+    parser.add_argument("--out", required=True)
     args = parser.parse_args()
+
+    from Bio import SeqIO
+    refs = [[c2i[c] for c in str(r.seq).upper()] for r in SeqIO.parse(args.refs, "fasta")]
+    dmat = np.load(args.dmat)
 
     PI = args.pi
     D = args.D
     GAMMA = args.gamma
     READLEN = args.read_length
-    L = args.genome_length
     NREADS = args.n_reads
-    NITS=args.n_iterations
-    EPS = args.min_mixture_distance
     MU = args.mu
     COVQ = args.covq
 
-    ds = DataSimulator(NREADS,READLEN,L,GAMMA,PI,D,MU,COVQ,PAIRED_END=args.paired_end) 
-    sys.stderr.write("Simulating dataset with parameters:\n")
-    sys.stderr.write("GENOME_LENGTH=%d\n" % L)
-    sys.stderr.write("PI=%f\n" % PI)
-    sys.stderr.write("GAMMA=%f\n" % GAMMA)
-    sys.stderr.write("MU=%f\n" % MU)
-    sys.stderr.write("READ_LENGTH=%d\n" % READLEN)
-    sys.stderr.write("NREADS=%d\n" % NREADS)
-    sys.stderr.write("N_ITERATIONS=%d\n" % NITS)
-    sys.stderr.write("D=%d\n" % D)
-    sys.stderr.write("EPS=%d\n" % EPS)
+    ds = DataSimulator(NREADS,READLEN,GAMMA,PI,D,MU,COVQ,PAIRED_END=args.paired_end,TEMPLATE_SEQUENCES=refs, DMAT=dmat) 
+    ds.write_reads(args.out)
 
-    ds.
