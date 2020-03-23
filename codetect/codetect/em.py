@@ -1,31 +1,31 @@
-#import pymc3 as pm
 from io import StringIO
 import math
 import numpy as np
-#import seaborn as sns
-#import theano.tensor as tt
 import sys
 import random
 import plotter
+from utils import ham, c2i
 np.set_printoptions(threshold=sys.maxsize)
 
-
-c2i = {c:i for i,c in enumerate("ACGT")}
-def ham(s1, s2):
-    return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
-
 class EM():
-    def __init__(self, ds, EPS):
+    """ Expectation Maximization object for parameter estimation.
+    
+    Args:
+        rd: a ReadData object.
+        min_d: minimum distance of estimated string from consensus.
+    """
+    def __init__(self, ds, min_d):
         self.ds = ds
+        self.ds.filter(99)
         self.X = ds.X
-        self.N_READS = sum([Xi.count for Xi in self.X])
+        self.n_reads = sum([Xi.count for Xi in self.X])
         self.M = ds.M
-        self.V_INDEX = ds.V_INDEX
-        self.MIN_COV = 0
-        self.CONSENSUS = ds.get_consensus()
-        self.MIN_THRESHOLD = 0.001
-        self.MIN_FREQ = 0.03
-        self.EPSILON = EPS
+        self.V_index = ds.V_INDEX
+        self.min_cov = 0
+        self.consensus = ds.get_consensus()
+        self.min_threshold = 0.001
+        self.min_freq = 0.03
+        self.min_d = min_d
 
     def calc_log_likelihood(self,st,g,mu,pi):
         # We now seek the log likelihood 
@@ -50,7 +50,7 @@ class EM():
     def print_debug_info(self, Tt, st):
         inds = sorted([i for i in range(len(self.X))], key = lambda i : self.X[i].pos)
         for i in inds:
-            print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.CONSENSUS), self.X[i].cal_ham(st))
+            print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
 
     def calTi_pair(self,Xi,pi,g,v):
         a = Xi.Pmajor(g)
@@ -139,33 +139,33 @@ class EM():
         for k in self.ds.VALID_INDICES:
             bw = wmat[k]
             # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
-            if ststar[k] == self.CONSENSUS[k]:
-                maxalt = max([j for j in range(4) if j != self.CONSENSUS[k]], key=lambda x:bw[x])
-#                assert self.CONSENSUS[k] != maxalt
+            if ststar[k] == self.consensus[k]:
+                maxalt = max([j for j in range(4) if j != self.consensus[k]], key=lambda x:bw[x])
+#                assert self.consensus[k] != maxalt
 #                assert bw[ststar[k]] >= bw[maxalt]
-#                assert bw[self.CONSENSUS[k]] >= bw[maxalt], (k,self.CONSENSUS[k], bw, maxalt)
+#                assert bw[self.consensus[k]] >= bw[maxalt], (k,self.consensus[k], bw, maxalt)
                 if bw[maxalt] > 0:
                     loss = bw[ststar[k]]-bw[maxalt]
                     maxalts.append([k,maxalt,loss])
-                    assert maxalt != self.CONSENSUS[k]
+                    assert maxalt != self.consensus[k]
         maxalts = np.array(maxalts)
         # Assume sorts small to high, take the last -diff, recall
         # diff is negative
         toflip = maxalts[np.argsort(maxalts[:,2])][0:-diff]
         for k,maxalt,loss in toflip:
-            assert self.CONSENSUS[int(k)] != maxalt
+            assert self.consensus[int(k)] != maxalt
             ststar[int(k)] = int(maxalt)
-            assert ststar[int(k)] != self.CONSENSUS[int(k)]
+            assert ststar[int(k)] != self.consensus[int(k)]
 #            print(k,maxalt,w,wmat[int(k)])
         return ststar        
 
     def get_weight_base_array(self, T):
-        baseweights = np.zeros((len(self.CONSENSUS), 4))
+        baseweights = np.zeros((len(self.consensus), 4))
         # FIRST CALCULATE THE MOST WEIGHTY BASE FOR EACH POSITION
         for k in self.ds.VALID_INDICES:
             v = np.zeros(4)
             totalTk = 0
-            for j,rl in enumerate(self.V_INDEX[k]):
+            for j,rl in enumerate(self.V_index[k]):
                 for ri in rl:
                     Xri = self.X[ri]
                     assert k in Xri.map, (k,Xri.map)
@@ -179,15 +179,15 @@ class EM():
     def recalc_st(self,T,minh):
         # BUILD THE MAXIMUM STRING
         baseweights = self.get_weight_base_array(T)
-        ststar = [c for c in self.CONSENSUS]
+        ststar = [c for c in self.consensus]
         for bi in self.ds.VALID_INDICES:
             bw = baseweights[bi]
-            maxi = max([j for j in range(4) if len(self.V_INDEX[bi][j]) > self.MIN_COV], key=lambda x:bw[x])
+            maxi = max([j for j in range(4) if len(self.V_index[bi][j]) > self.min_cov], key=lambda x:bw[x])
             if sum(bw) > 0:
                 ststar[bi] = maxi
             else:
-                ststar[bi] = self.CONSENSUS[bi]
-        diff = ham(ststar,self.CONSENSUS)-minh
+                ststar[bi] = self.consensus[bi]
+        diff = ham(ststar,self.consensus)-minh
         if diff >= 0:
             return ststar
         else:
@@ -196,56 +196,56 @@ class EM():
  
     def recalc_V(self,T):
         # Regularize by claiming that the probability of a mismatch can never be less than MIN_THRESHOLD
-        newv = np.zeros((len(self.V_INDEX),4))
-        assert len(self.V_INDEX) == len(self.M)
-        for k in range(len(self.V_INDEX)):
+        newv = np.zeros((len(self.V_index),4))
+        assert len(self.V_index) == len(self.M)
+        for k in range(len(self.V_index)):
             for c in range(4):
                 # recalc Vi
                 sumo = 0
                 # Iterate over reads that mismatch at position k
                 # THIS IS THE PROBABILITY THAT THEY ARE NOT THE SAME
-                for ri in self.V_INDEX[k][c]:
+                for ri in self.V_index[k][c]:
                     sumo += (T[ri,1])
                 assert sum(T[:,1]) > 0
                 assert np.isfinite(sumo), sumo
                 newv[k,c] = sumo
-            newv[k] += self.MIN_THRESHOLD
+            newv[k] += self.min_threshold
             assert sum(newv[k]) != 0,(k,newv[k])
             newv[k] /= sum(newv[k])
             assert sum(newv[k]) > 0.99999, (newv[k], sum(newv[k]))
         return newv
 
     def recalc_pi(self,T):
-        return sum([T[i,0]*self.X[i].count for i in range(len(T))])/self.N_READS
+        return sum([T[i,0]*self.X[i].count for i in range(len(T))])/self.n_reads
 
     def expected_d(self,v):
         sumo = 0
-        assert len(self.CONSENSUS) == len(v)
-        for ci, c in enumerate(self.CONSENSUS):
+        assert len(self.consensus) == len(v)
+        for ci, c in enumerate(self.consensus):
             alts = [v[ci,j] for j in range(4) if j != c]
             sumo += sum(alts)
         return sumo
 
     def init_st_random(self,M):
-        st = [c for c in self.CONSENSUS]
+        st = [c for c in self.consensus]
         for vi,vt in enumerate(M):
             st[vi] = np.random.choice([j for j in range(4)],p=vt)
         return st
 
     def init_st(self,M):
-        st = [c for c in self.CONSENSUS]
+        st = [c for c in self.consensus]
         second_best = []
         for vi in self.ds.VALID_INDICES:
             vt = M[vi]
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             sb = stups[-2]
-            if vt[sb] > 0.0 and len(self.V_INDEX[vi][sb]) > self.MIN_COV:
+            if vt[sb] > 0.0 and len(self.V_index[vi][sb]) > self.min_cov:
                 second_best.append((vt[sb],vi,sb))
         second_best = sorted(second_best,key=lambda x:x[0])
         c = 0
-#        for val,vi,sb in second_best[-len(self.CONSENSUS)//3:]:
+#        for val,vi,sb in second_best[-len(self.consensus)//3:]:
         for val,vi,sb in second_best[::-1]:
-            if c > self.EPSILON and val < self.MIN_FREQ:
+            if c > self.min_d and val < self.min_freq:
                 break
             c += 1
             st[vi] = sb
@@ -254,9 +254,9 @@ class EM():
     def check_st(self, st):
         for i in range(len(st)):
             if i not in self.ds.VALID_INDICES:
-                assert st[i] == self.CONSENSUS[i]
+                assert st[i] == self.consensus[i]
 
-    def do2(self, N_ITS, random_init=False, debug=False):
+    def do2(self, N_ITS, random_init=False, debug=False, debug_minor=None):
         pit = 0.5
         gt = 0.01
         mut = 0.01
@@ -272,27 +272,27 @@ class EM():
         for i, Xi in enumerate(self.X):
             for pos,bk in Xi.get_aln():
 #                assert Xi.i2c(bk) != "-"
-                assert i in self.V_INDEX[pos][bk]
+                assert i in self.V_index[pos][bk]
                 assert self.M[pos,bk] > 0
         for m in self.M:
             if sum([q for q in m]) > 0:
                 assert sum(m) > 0.98, m
-        assert len(self.V_INDEX) == len(self.M)
+        assert len(self.V_index) == len(self.M)
         assert 0 <= gt <= 1,gt
-        assert ham(st, self.CONSENSUS) >= self.EPSILON, ham(st, self.CONSENSUS)
+        assert ham(st, self.consensus) >= self.min_d, ham(st, self.consensus)
 
         for t in range(N_ITS):
             self.check_st(st)
             assert pit <= 0.999
-            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.CONSENSUS)]) + "\n")
-            assert ham(st, self.CONSENSUS) >= self.EPSILON
+            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.consensus)]) + "\n")
+            assert ham(st, self.consensus) >= self.min_d
             if pit == 1:
                 sys.stderr.write("No coinfection detected.\n")
                 return False,st,Tt
 
             Tt = self.recalc_T2(pit,gt,st,mut)
             if debug:
-                plotter.plot_genome(self.ds,Tt,st)
+                plotter.plot_genome(self.ds,Tt,st,debug_minor)
 #            self.print_debug_info(Tt,st)
             self.st = st
             self.Tt = Tt
@@ -306,13 +306,13 @@ class EM():
             pit = min(0.98, pit)
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
-            st = self.recalc_st(Tt, self.EPSILON)     
+            st = self.recalc_st(Tt, self.min_d)     
 #            mut = gt
             mut = self.recalc_mu(Tt, st)
 #            mut = min(max(mut, 0.0001), 0.05)
 
         if debug:
-            plotter.plot_genome(self.ds,Tt,st)
+            plotter.plot_genome(self.ds,Tt,st,debug_minor)
 
         if pit > 0.99:
             sys.stderr.write("No coinfection detected!\n")
@@ -329,9 +329,9 @@ class EM():
         pit = 0.5
         gt = 0.01
         mut = gt
-        st = self.CONSENSUS
+        st = self.consensus
         for t in range(N_ITS):
-            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.CONSENSUS)]) + "\n")
+            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.consensus)]) + "\n")
             Tt = self.recalc_T2(pit,gt,st,mut)
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
