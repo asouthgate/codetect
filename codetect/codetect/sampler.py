@@ -337,7 +337,6 @@ if __name__ == "__main__":
     import sys
     if "--debug" not in sys.argv:
         logging.disable(logging.CRITICAL)
-    c2i = {"A":0, "C":1, "G":2, "T":3, "-":4, "M":4, "R":4, "Y":4, "S":4, "K":4, "W":4, "V":4, "H":4, "N":4, "X":4}
     refs = [tuple([c2i[c.upper()] for c in str(r.seq)]) for r in SeqIO.parse(sys.argv[1], "fasta")]
     dmat = np.load(sys.argv[2])
     # TODO: SLOW: FIX FOR IMPORT

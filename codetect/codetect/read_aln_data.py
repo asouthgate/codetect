@@ -2,9 +2,7 @@ import sys
 import random
 import numpy as np
 import functools
-
-def ham(s1, s2):
-    return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
+from utils import ham
 
 class ReadAlnData():
     """ Class that stores read alignments.
@@ -101,7 +99,7 @@ class ReadAlnData():
 
     def build_Vindex(self): 
         """ Build a reference pos with c -> reads mapping to pos index. """
-        Vindex = [[[] for c in range(5)] for i in range(len(self._reference))]
+        Vindex = [[[] for c in range(4)] for i in range(len(self._reference))]
         for i,Xi in enumerate(self.X):
             for pos, c in Xi.get_aln():
                 Vindex[pos][c].append(i)
@@ -109,8 +107,8 @@ class ReadAlnData():
        
     def reads2mats(self):
         """ Build a per position base frequency dist matrix """
-        mat = np.zeros(shape=(len(self._reference),5))
-        Cmat = np.zeros(shape=(len(self._reference),5))
+        mat = np.zeros(shape=(len(self._reference),4))
+        Cmat = np.zeros(shape=(len(self._reference),4))
         for i, Xi in enumerate(self.X):
             for pos,c in Xi.get_aln():
                 mat[pos,c] += Xi.count

@@ -22,7 +22,7 @@ class EM():
         self.M = ds.M
         self.V_INDEX = ds.V_INDEX
         self.MIN_COV = 0
-        self.CONSENSUS = ds.CONSENSUS
+        self.CONSENSUS = ds.get_consensus()
         self.MIN_THRESHOLD = 0.001
         self.MIN_FREQ = 0.03
         self.EPSILON = EPS
@@ -271,7 +271,7 @@ class EM():
         assert len(self.X) > 0
         for i, Xi in enumerate(self.X):
             for pos,bk in Xi.get_aln():
-                assert Xi.i2c(bk) != "-"
+#                assert Xi.i2c(bk) != "-"
                 assert i in self.V_INDEX[pos][bk]
                 assert self.M[pos,bk] > 0
         for m in self.M:

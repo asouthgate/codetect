@@ -1,4 +1,5 @@
 import numpy as np
+from utils import rev_comp
 
 class ReadAln():
     """Read alignment class.
@@ -30,6 +31,18 @@ class ReadAln():
             prevpos = pos
         return "ReadAln@pos=%d@count=%d@str=%s" % (self.get_aln()[0][0],self.count,s)
 
+    def get_aln_segments(self):
+        s = ""
+        prevpos = 0
+        for pos, base in self.get_aln():
+            diff = pos-prevpos
+            if diff > 1:
+                s += "X"
+            s += self.i2c(base)
+            prevpos = pos
+        segs = [l for l in s.split("X") if l != ""]
+        return segs
+ 
     def get_length(self):
         return len(self.map)
 
@@ -38,6 +51,12 @@ class ReadAln():
 
     def get_ints(self):
         return [b for p,b in self.get_aln()]
+
+    def get_fq_entry_pair(self):
+        firstseq, secondseq = self.get_aln_segments()                
+        first = "@"+str(self.name)+"/1\n"+firstseq+"\n+\n"+"I"*len(firstseq)+"\n"
+        second = "@"+str(self.name)+"/2\n"+rev_comp(secondseq)+"\n+\n"+"I"*len(secondseq)+"\n"
+        return first, second
 
     def cal_ham(self,S): 
         # DEPRECIATED, SOMEHOW
@@ -85,7 +104,9 @@ class ReadAln():
             pos: position in reference.
             c: base that maps at position pos (encoded as {0,1,2,3}).
         """
-        self.map[pos] = c
+        if c is not None:
+            assert c < 4
+            self.map[pos] = c
 
     def calc_nm_major(self, consensus):
         # TODO: THIS IS SLOW. SHOULD BE CACHED 
