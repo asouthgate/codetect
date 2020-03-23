@@ -197,7 +197,7 @@ class DataSimulator(ReadAlnData):
         minor = self.mutate_n(major,D)
         return major,minor
 
-    def gen_aln(self,i, seq, paired_end, insert_size=350):
+    def gen_aln(self, label, seq, paired_end, insert_size=350):
         """ 
         Generate a random read alignment.
     
@@ -219,7 +219,7 @@ class DataSimulator(ReadAlnData):
         else:
             randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
             sampinds = [randpos+l for l in range(self.READ_LENGTH)]
-        aln = ReadAln(i)
+        aln = ReadAln(label)
         for si in sampinds:
             roll = random.uniform(0,1)
             c = seq[si]
@@ -245,9 +245,11 @@ class DataSimulator(ReadAlnData):
         for i in range(self.N_READS):
             seqi = np.random.choice([0,1],p=w)
             popseqs, popfreqs = pops[seqi]
-            seqi = np.random.choice(range(len(popseqs)), p=popfreqs)
-            seq = popseqs[seqi]
-            aln = self.gen_aln(i,seq,paired_end)
+            subseqi = np.random.choice(range(len(popseqs)), p=popfreqs)
+            seq = popseqs[subseqi]
+            indicstr = "MAJOR" if seqi == 0 else "MINOR"
+            lab = str(i)+"_"+indicstr
+            aln = self.gen_aln(lab,seq,paired_end)
             aln.z = seqi
             X.append(aln)
         return X
@@ -266,7 +268,7 @@ def write_refs(ds, opref):
     with open(opref + ".major.fa", "w") as of1:
         of1.write(">major\n"+"".join(["ACGT"[c] for c in ds.major if c != 4]))
     with open(opref + ".minor.fa", "w") as of2:
-        of2.write(">minor\n"+"".join(["ACGT"[c] for c in ds.major if c != 4]))
+        of2.write(">minor\n"+"".join(["ACGT"[c] for c in ds.minor if c != 4]))
 
 if __name__ == "__main__":
     import argparse 

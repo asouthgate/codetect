@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from utils import c2i
 
-def plot_genome(rd,T,st):
+def plot_genome(rd,T,st,minor):
     """
     Plot estimated coverage for each cluster across the genome,
     respective posititions, estimated mutations,
@@ -14,11 +15,10 @@ def plot_genome(rd,T,st):
     cov0 = np.zeros(len(rd.get_consensus()))
     cov1 = np.zeros(len(rd.get_consensus()))
     for Xi in rd.X:
-        if Xi.z == 0:
+        if "MAJOR" in Xi.name:
             for p,b in Xi.map.items():
                 cov0[p] += 1
         else:
-            assert Xi.z == 1
             for p,b in Xi.map.items():
                 cov1[p] += 1
     rd.COV = cov0+cov1
@@ -27,9 +27,9 @@ def plot_genome(rd,T,st):
     hamarr = np.zeros(len(rd.get_consensus()))
     hamarr2 = np.zeros(len(rd.get_consensus()))
     for i,hi in enumerate(rd.get_consensus()):
-        if rd.get_consensus()[i] != c2i[rd.minor[i]]:
-            hamarr[i] = len(rd.V_INDEX[i][c2i[rd.minor[i]]])
-        if st[i] != rd.get_consensus()[i]:
+        if st[i] != minor[i]:
+            hamarr[i] = len(rd.V_INDEX[i][minor[i]])
+        elif st[i] == minor[i] and st[i] != rd.get_consensus()[i]:
             hamarr2[i] = len(rd.V_INDEX[i][st[i]])
 
     for i,Xi in enumerate(rd.X):
@@ -37,8 +37,8 @@ def plot_genome(rd,T,st):
         for pos,base in Xi.map.items():
             estcov0[pos] += Ti[0]
             estcov1[pos] += Ti[1]
-    plt.plot(hamarr, color='red', alpha=0.5)
-    plt.plot(hamarr2, color='blue', alpha=0.5)
+    plt.plot(hamarr, color='purple', alpha=0.5)
+    plt.plot(hamarr2, color='pink', alpha=0.5)
     plt.plot(cov0,color='blue')
     plt.plot(cov1,color='orange')
     plt.plot(estcov0,color='purple')

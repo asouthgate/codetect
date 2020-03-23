@@ -13,7 +13,7 @@ def collect_alns(fname):
         seqbases = [c2i[qseq[p[0]]] for p in pairs]
         if aln.flag & 16 != 0:
             if not aln.query_name in alns:
-                ra = ReadAln(ci)
+                ra = ReadAln(aln.query_name)
                 alns[aln.query_name] = ra
             for ri,i in enumerate(refpositions):
                 if seqbases[ri] is not None and i is not None:

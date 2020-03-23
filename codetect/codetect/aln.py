@@ -105,7 +105,6 @@ class ReadAln():
             c: base that maps at position pos (encoded as {0,1,2,3}).
         """
         if c is not None:
-            assert c < 4
             self.map[pos] = c
 
     def calc_nm_major(self, consensus):
