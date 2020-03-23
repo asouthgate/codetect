@@ -9,7 +9,7 @@ class ReadAln():
 
     """
     def __init__(self,name):
-        self.name = name
+        self.name = str(name)
         self.pos = None
 #        self.base_pos_pairs = []
         self.map = {}
