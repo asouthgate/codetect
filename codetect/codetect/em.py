@@ -2,11 +2,11 @@
 from io import StringIO
 import math
 import numpy as np
-import matplotlib.pyplot as plt
 #import seaborn as sns
 #import theano.tensor as tt
 import sys
 import random
+import plotter
 np.set_printoptions(threshold=sys.maxsize)
 
 
@@ -292,7 +292,7 @@ class EM():
 
             Tt = self.recalc_T2(pit,gt,st,mut)
             if debug:
-                self.ds.plot_genome(Tt,st)
+                plotter.plot_genome(self.ds,Tt,st)
 #            self.print_debug_info(Tt,st)
             self.st = st
             self.Tt = Tt
@@ -312,7 +312,7 @@ class EM():
 #            mut = min(max(mut, 0.0001), 0.05)
 
         if debug:
-            self.ds.plot_genome(Tt,st)
+            plotter.plot_genome(self.ds,Tt,st)
 
         if pit > 0.99:
             sys.stderr.write("No coinfection detected!\n")
