@@ -27,16 +27,23 @@ class EM():
         self.min_freq = 0.03
         self.min_d = min_d
 
-    def calc_log_likelihood(self,st,g,mu,pi):
+    def calc_log_likelihood(self,st,g0,g1,pi):
+        """
+        Calculate the log likelihood of data given parameters.
+
+        Args:
+            st: current string.
+            g0: cluster 0 gamma.
+            g1: cluster 1 gamma.
+            pi: cluster proportion.
+        """
         # We now seek the log likelihood 
-        # sum logP(Xi|theta) = log(P(Xi|Zi=1,theta)P(Zi=1|theta) + 
-        # P(Xi | Zi=2,theta)P(Zi=2|theta))
         # = log(P(X_i | Zi=1,theta)pi + P(Xi | Zi=2,theta)(1-pi))
-        # Do this via logsumexp
+        # Use logsumexp
         sumo = 0
         for i,Xi in enumerate(self.X):
-            a = Xi.logPmajor(g)
-            b = Xi.logPminor2(st,mu)
+            a = Xi.logPmajor(g0)
+            b = Xi.logPminor2(st,g1)
             l1 = a
             l2 = b
             lw1 = np.log(pi)
@@ -52,24 +59,19 @@ class EM():
         for i in inds:
             print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
 
-    def calTi_pair(self,Xi,pi,g,v):
-        a = Xi.Pmajor(g)
-        b = Xi.Pminor(v)
-        assert 0 <= a <= 1
-        assert 0 <= b <= 1
-        c = pi*a + (1-pi)*b
-        t1i = (pi * a) / c
-        t2i = ((1-pi) * b) / c
-#        print(str(Xi)[:50],Xi.z,Xi.nm)
-#        print()
-#        print(a,b,c)
-        tp = np.array([t1i,t2i])
-        assert sum(tp) > 0.999
-        return tp
 
-    def calTi_pair2(self,Xi,pi,g,st,mu):
-        a = Xi.logPmajor(g)
-        b = Xi.logPminor2(st,mu)
+    def calTi_pair2(self,Xi,pi,g0,st,g1):
+        # TODO: depreciate; import calculator function
+        """ Calculate the ith membership conditional probability array element.
+        
+        Args:
+            pi: mixture model proportion
+            g0: gamma parameter for cluster 0
+            st: cluster 1 string
+            g1: gamma parameter for cluster 1
+        """
+        a = Xi.logPmajor(g0)
+        b = Xi.logPminor2(st,g1)
 #        assert 0 <= a <= 1, a
 #        assert 0 <= b <= 1, b
 #        print(a,b)
@@ -102,13 +104,6 @@ class EM():
         assert sum(tp) > 0.999, sum(tp)
         return tp
  
-    def recalc_T(self,pi,g,v):
-        res = []
-        for Xi in self.X:
-            pair = self.calTi_pair(Xi,pi,g,v)
-            res.append(pair)
-        return np.array(res)
-
     def recalc_T2(self,pi,g,st,mu):
         res = []
         for Xi in self.X:
@@ -324,19 +319,3 @@ class EM():
         props = sorted(np.random.dirichlet((1.0,1.0,1.0,1.0,1.0)))
         props = [p/2 for p in props]
         props[-1] += 0.5
-
-    def do_one_cluster(self, N_ITS, debug=False):
-        pit = 0.5
-        gt = 0.01
-        mut = gt
-        st = self.consensus
-        for t in range(N_ITS):
-            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.consensus)]) + "\n")
-            Tt = self.recalc_T2(pit,gt,st,mut)
-            gt = self.recalc_gamma(Tt)
-            gt = min(max(gt, 0.0001), 0.05)
-            mut = gt
-        if debug:
-            self.ds.plot_genome(Tt,st)       
-        sys.stderr.write("Coinfection detected!\n")
-        return self.calc_log_likelihood(st,gt,mut,pit),True, st, Tt
