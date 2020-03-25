@@ -37,8 +37,8 @@ def plot_genome(rd,T,st,minor):
         for pos,base in Xi.map.items():
             estcov0[pos] += Ti[0]
             estcov1[pos] += Ti[1]
-    plt.plot(hamarr, color='purple', alpha=0.5)
-    plt.plot(hamarr2, color='pink', alpha=0.5)
+    plt.plot(hamarr, color='red', alpha=0.5)
+    plt.plot(hamarr2, color='green', alpha=0.5)
     plt.plot(cov0,color='blue')
     plt.plot(cov1,color='orange')
     plt.plot(estcov0,color='purple')
