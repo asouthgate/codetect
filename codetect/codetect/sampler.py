@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 from likelihood_cache import MixtureModel
 from log import logger
 import logging
-from utils import ham, logsumexp
+from utils import ham, logsumexp, ham_early_bail
+import sys
 
 class RefPropDist():
     def __init__(self, dmat):
@@ -264,20 +265,20 @@ class MixtureModelSampler():
         if self.sample_refs:
             refi = self.init_refi
         for nit in range(nits):
-            currL = self.mm.cal_loglikelihood(ds)
+            currL = self.mm.cal_loglikelihood(rd)
             sys.stderr.write("i=%d,L=%f,%scurrpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, sampreflog, pi, g0, g1))
             if self.sample_refs:
-                refi = self.mh_reference_sample(ds, refi)
+                refi = self.mh_reference_sample(rd, refi)
                 refstr = self.refs[refi]
                 st0 = self.mm.st
                 sampreflog = "sampref=%d," % refi
             if self.sample_strings_gibbs:
                 assert not self.sample_refs, "Only ref sampling OR gibbs is allowed currently."
-                st0,curr_ref_diffs = self.constrained_sample_string(ds, refstr, curr_ref_diffs) 
+                st0,curr_ref_diffs = self.constrained_sample_string(rd, refstr, curr_ref_diffs) 
             if self.sample_gammas:
-                pi,g0,g1 = self.mh_sample_normal(ds)
+                pi,g0,g1 = self.mh_sample_normal(rd)
             else:
-                pi = self.mh_sample_normal_onlypi(ds)
+                pi = self.mh_sample_normal_onlypi(rd)
             self.sample_params.append([pi,g0,g1])
             self.sample_strings.append(st0) 
             self.sample_Ls.append(currL)
@@ -291,16 +292,16 @@ class MixtureModelSampler():
         Optional Args:
             nits: number of samples.
         """
-        consensus = ds.get_consensus()
+        consensus = rd.get_consensus()
         pi = self.mm.pi
         g0 = self.mm.g0
         g1 = self.mm.g1
         for nit in range(nits):
             sys.stderr.write("i=%d,L=%f,currham=%d,currpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, ham(self.mm.st,consensus), pi, g0,  g1))
-            for i in ds.VALID_INDICES:
-                newsi = self.gibbs_sample_si(ds,i)
-            pi,g0,g1 = self.mh_sample_normal(ds)
-            currL = self.mm.cal_loglikelihood(ds)
+            for i in rd.VALID_INDICES:
+                newsi = self.gibbs_sample_si(rd,i)
+            pi,g0,g1 = self.mh_sample_normal(rd)
+            currL = self.mm.cal_loglikelihood(rd)
             self.sample_params.append([pi,g0,g1])
             self.sample_strings.append([c for c in self.mm.st]) 
             self.sample_Ls.append(currL)
@@ -320,7 +321,7 @@ def del_close_to_fixed_point(fixed_point,mind,refs,dmat):
     new_refs = []
     inds2del = []
     for ri,ref in enumerate(refs):
-        if ham(ref, fixed_point) >= mind:
+        if ham_early_bail(ref, fixed_point, mind) >= mind:
             new_refs.append(ref)
         else:
             inds2del.append(ri)
