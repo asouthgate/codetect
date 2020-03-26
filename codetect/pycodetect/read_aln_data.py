@@ -2,7 +2,7 @@ import sys
 import random
 import numpy as np
 import functools
-from utils import ham
+from pycodetect.utils import ham
 
 class ReadAlnData():
     """ Class that stores read alignments.

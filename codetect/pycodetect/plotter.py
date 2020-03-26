@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from utils import c2i
+from pycodetect.utils import c2i
 
 def plot_genome(rd,T,st,minor):
     """

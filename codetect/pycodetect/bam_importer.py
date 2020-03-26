@@ -1,7 +1,7 @@
 import pysam
-from read_aln_data import ReadAlnData
-from aln import ReadAln
-from utils import c2i,ham
+from pycodetect.read_aln_data import ReadAlnData
+from pycodetect.aln import ReadAln
+from pycodetect.utils import c2i,ham
  
 def collect_alns(fname):
     alns = {}

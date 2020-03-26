@@ -1,5 +1,5 @@
 import numpy as np
-from utils import rev_comp
+from pycodetect.utils import rev_comp
 
 class ReadAln():
     """Read alignment class.
