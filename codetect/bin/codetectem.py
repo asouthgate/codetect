@@ -32,4 +32,9 @@ if __name__ == "__main__":
 
     #//*** EM ***
     em = EM(rad,args.mind)
-    print(em.do2(20))
+    L, result, seq, Tarr, pi, g = em.do2(20)
+    print("L,pi,g1,seq")
+    strseq = "".join([str(c) for c in seq])
+    print("%f,%f,%f,%s" % (L, pi, g, strseq))
+
+

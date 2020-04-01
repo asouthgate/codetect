@@ -55,11 +55,12 @@ if __name__ == "__main__":
     mms = MixtureModelSampler(rad, rad.get_consensus(), allowed_states=valid_states, allowed_positions=valid_inds, initstring=randy, min_d = args.mind)
 
     #//*** Sample ***//
-    strings,params,Ls = mms.sample(rad,nits=100)
+    strings,params,Ls = mms.sample(rad,nits=5)
 
     #//*** Collect results ***//
     params = np.array(params)
-    meanpi = np.mean(params[:,0])
-    meang0 = np.mean(params[:,1])
-    meang1 = np.mean(params[:,2])
-    print("mean pi=%f, mean g0=%f, mean g1=%f" % (meanpi, meang0, meang1))
+
+    print("L,pi,g1,g2,seq")
+    for i in range(len(strings)):
+        print("%d,%f,%f,%f,%s" % (i, Ls[i], params[i,0], params[i,1], params[i,2], strings[i]))
+

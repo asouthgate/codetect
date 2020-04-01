@@ -54,30 +54,30 @@ process runEM {
     """    
 }
 
-process runGibbs {
-    publishDir = params.outDir+"/estimation"
-
-    input:
-        tuple file(bamFile), file(bamIndex) from bamFileAndIndex2
-        file vpref from ref3
-    output:
-        tuple file(bamFile), file(bamIndex) into bamFileAndIndex3
-        file vpref into ref4
-        file "${opref}.gibbsout" into GibbsOutFile
-    script:
-        opref = bamFile.name.replace(".bam", "")
-        mind = params.min_d
-    """
-    codetectgibbs.py -mind ${mind} -bam ${bamFile} -ref ${vpref} > ${opref}.gibbsout
-    """
-}
+//process runGibbs {
+//   publishDir = params.outDir+"/estimation"
+//
+//    input:
+//        tuple file(bamFile), file(bamIndex) from bamFileAndIndex2
+//        file vpref from ref3
+//    output:
+//        tuple file(bamFile), file(bamIndex) into bamFileAndIndex3
+//        file vpref into ref4
+//        file "${opref}.gibbsout" into GibbsOutFile
+//    script:
+//        opref = bamFile.name.replace(".bam", "")
+//        mind = params.min_d
+//    """
+//    codetectgibbs.py -mind ${mind} -bam ${bamFile} -ref ${vpref} > ${opref}.gibbsout
+//    """
+//}
 
 process runMH{
     publishDir = params.outDir+"/estimation"
 
     input:
-        tuple file(bamFile), file(bamIndex) from bamFileAndIndex3
-        file vpref from ref4
+        tuple file(bamFile), file(bamIndex) from bamFileAndIndex2
+        file vpref from ref3
     output:
         file vpref into ref5
         file "${opref}.mhout" into MHOutFile

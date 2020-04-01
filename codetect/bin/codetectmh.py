@@ -30,13 +30,15 @@ if __name__ == "__main__":
     parser.add_argument("-msa", type=str, required=True)
     parser.add_argument("-dmat", type=str, required=True)
     parser.add_argument("-mind", type=int, required=True)
+    parser.add_argument("--debug", action="store_true", required=False, default=False)
+
     args = parser.parse_args()
     
     #//*** Parse alignment***
     alns = collect_alns(args.bam)
     refrec = [r for r in SeqIO.parse(args.ref, "fasta")][0]
-    fixed_point_id = refrec.split()[0]    
-    ref = str_c2i(str(refreq.seq))
+    fixed_point_id = refrec.description.split()[0]    
+    ref = str_c2i(str(refrec.seq))
     rad = ReadAlnData(alns, ref)
 
     #//*** Parse MSA ***
@@ -44,10 +46,10 @@ if __name__ == "__main__":
         logging.disable(logging.CRITICAL)
     ref_msa = []
     fixed_point = None
-    for r in SeqIO.parse(args.ref, "fasta"):
-        seq = str_c2i(str(r.seq).upper())
+    for r in SeqIO.parse(args.msa, "fasta"):
+        seq = list(str_c2i(str(r.seq).upper()))
         ref_msa.append(seq)
-        if fixed_poind_id in r.description:
+        if fixed_point_id in r.description:
             fixed_point = seq
     assert fixed_point is not None, "%s is not a reference in the references" % args.fixed_point
 
@@ -55,11 +57,15 @@ if __name__ == "__main__":
     fixed_point_delinds = [i for i in range(len(fixed_point)) if fixed_point[i] == 4][::-1]
     for ind in fixed_point_delinds:
         for seq in ref_msa: del seq[ind]
+    fixed_point = [j for j in fixed_point if j != 4]
+    for seq in ref_msa: assert len(fixed_point) == len(seq)
+    assert len(ref) == len(fixed_point), (len(ref), len(fixed_point))
     refs = ref_msa
 
     #//*** Parse distance matrix
-    dmat = np.load()
+    dmat = np.load(args.dmat)
     # TODO: SLOW: FIX FOR IMPORT
+    sys.stderr.write("Starting with %d refs\n" % len(refs))
     for i in range(len(dmat)-1):
         for j in range(i+1,len(dmat)):
             dmat[j,i] = dmat[i,j]
@@ -77,7 +83,8 @@ if __name__ == "__main__":
 
     #//*** Collect results ***//
     params = np.array(params)
-    meanpi = np.mean(params[:,0])
-    meang0 = np.mean(params[:,1])
-    meang1 = np.mean(params[:,2])
-    print("mean pi=%f, mean g0=%f, mean g1=%f" % (meanpi, meang0, meang1))
+
+    print("L,pi,g1,g2,seq")
+    for i in range(len(strings)):
+        print("%d,%f,%f,%f,%s" % (i, Ls[i], params[i,0], params[i,1], params[i,2], strings[i]))
+
