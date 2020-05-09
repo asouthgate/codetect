@@ -40,6 +40,7 @@ class EM():
         # We now seek the log likelihood 
         # = log(P(X_i | Zi=1,theta)pi + P(Xi | Zi=2,theta)(1-pi))
         # Use logsumexp
+        # TODO: THIS IS WRONG
         sumo = 0
         for i,Xi in enumerate(self.X):
             a = Xi.logPmajor(g0)
@@ -251,6 +252,10 @@ class EM():
             if i not in self.ds.VALID_INDICES:
                 assert st[i] == self.consensus[i]
 
+    def calc_L0(self):
+        g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.get_consensus()))]))
+        return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
+
     def do2(self, N_ITS, random_init=False, debug=False, debug_minor=None):
         pit = 0.5
         gt = 0.01
@@ -283,7 +288,7 @@ class EM():
             assert ham(st, self.consensus) >= self.min_d
             if pit == 1:
                 sys.stderr.write("No coinfection detected.\n")
-                return False,st,Tt
+                return self.calc_log_likelihood(st,gt,mut,pit),False,st,pit,gt
 
             Tt = self.recalc_T2(pit,gt,st,mut)
             if debug:
@@ -295,7 +300,7 @@ class EM():
             self.pit = pit
             if sum(Tt[:,1]) == 0:
                 sys.stderr.write("No coinfection detected.\n")
-                return self.calc_log_likelihood(st,gt,mut,pit), False,st,Tt
+                return self.calc_log_likelihood(st,gt,mut,pit), False, st, pit, gt 
 
             pit = self.recalc_pi(Tt)
             pit = min(0.98, pit)
@@ -311,10 +316,10 @@ class EM():
 
         if pit > 0.99:
             sys.stderr.write("No coinfection detected!\n")
-            return self.calc_log_likelihood(st,gt,mut,pit), False, st, Tt
+            return self.calc_log_likelihood(st,gt,mut,pit), False, st, Tt, pit, gt
         
         sys.stderr.write("Coinfection detected!\n")
-        return self.calc_log_likelihood(st,gt,mut,pit),True, st, Tt
+        return self.calc_log_likelihood(st,gt,mut,pit),True, st, Tt, pit, gt
 
         props = sorted(np.random.dirichlet((1.0,1.0,1.0,1.0,1.0)))
         props = [p/2 for p in props]
