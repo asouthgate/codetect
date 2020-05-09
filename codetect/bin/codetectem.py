@@ -33,8 +33,10 @@ if __name__ == "__main__":
     #//*** EM ***
     em = EM(rad,args.mind)
     L, result, seq, Tarr, pi, g = em.do2(20)
-    print("L,pi,g1,seq")
+    L0 = em.calc_L0()
+    nsites = len(em.ds.VALID_INDICES)
+    print("L0,nsites,L,pi,g1,seq")
     strseq = "".join([str(c) for c in seq])
-    print("%f,%f,%f,%s" % (L, pi, g, strseq))
+    print("%f,%d,%f,%f,%f,%s" % (L0, nsites, L, pi, g, strseq))
 
 
