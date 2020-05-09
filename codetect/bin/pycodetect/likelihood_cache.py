@@ -1,7 +1,7 @@
 import numpy as np
 import math      
-from utils import *
-from log import logger
+from pycodetect.utils import *
+from pycodetect.log import logger
 
 # TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; could make them be unknowns
 
