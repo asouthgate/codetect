@@ -1,10 +1,10 @@
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-from likelihood_cache import MixtureModel
-from log import logger
+from pycodetect.likelihood_cache import MixtureModel
+from pycodetect.log import logger
 import logging
-from utils import ham, logsumexp, ham_early_bail
+from pycodetect.utils import ham, logsumexp, ham_early_bail
 import sys
 
 class RefPropDist():
@@ -32,7 +32,7 @@ class RefPropDist():
 
 class MixtureModelSampler():
     """ Samples from posterior of mixture model parameters."""
-    def __init__(self,rd,fixed_point,initstring=None,allowed_states=None,allowed_positions=None,dmat=None,refs=None,sample_gammas=False):
+    def __init__(self,rd,fixed_point,initstring=None,allowed_states=None,allowed_positions=None,dmat=None,refs=None,sample_gammas=False, min_d=None):
         # TODO: split class; too many responsibilities; args should not have so many mutually exclusive groups
         """
         Args:
@@ -70,6 +70,8 @@ class MixtureModelSampler():
             assert len(allowed_states) == len(fixed_point), "Allowed states is not like allowed sites; it is indexed relative to the alignment"
             self.allowed_positions = allowed_positions
             self.sample_strings_gibbs = True
+            self.min_d = min_d
+            assert initstring is not None, "You must provide an initialization string. Try a random one."
 
         # Initialize gamma
         if sample_gammas:
@@ -225,24 +227,24 @@ class MixtureModelSampler():
             logger.warning("new b rejected=%s,old=%s,ll=%f" % (choice, oldb, ll))
         return choice
 
-    def constrained_sample_string(self,ds, refstr, curr_ref_diffs, max_ref_dist=3):
+    def constrained_sample_string(self,ds, refstr, curr_ref_diffs, max_dist=100):
         for j in self.allowed_positions:
             if j in curr_ref_diffs:
                 # Even if we at the maximum dist, we can revert
                 assert refstr[j] != self.mm.st[j]
-                choice = self.gibbs_sample_si(ds,i)
+                choice = self.gibbs_sample_si(ds,j)
                 if choice == refstr[j]:
                     # If we have reverted, record that
                     curr_ref_diffs.remove(j)
-            elif len(curr_ref_diffs) <= max_ref_dist:
+            elif len(curr_ref_diffs) >= max_dist:
                 assert refstr[j] == self.mm.st[j]
-                # Cannot accept a new state (zero prior outside max_ref_dist)
+                # Cannot accept a new state (zero prior outside self.min_d)
                 # Do nothing
                 pass
             else:
                 assert refstr[j] == self.mm.st[j]
                 # We are within a radius of max_ref_dist to our refstr
-                choice = self.gibbs_sample_si(ds,i)
+                choice = self.gibbs_sample_si(ds,j)
                 if choice != refstr[j]:
                     curr_ref_diffs.add(j)
         return self.mm.st, curr_ref_diffs
@@ -265,8 +267,9 @@ class MixtureModelSampler():
         if self.sample_refs:
             refi = self.init_refi
         for nit in range(nits):
+            currham = ham(rd.get_consensus(), st0)
             currL = self.mm.cal_loglikelihood(rd)
-            sys.stderr.write("i=%d,L=%f,%scurrpi=%f,currgam=%f,currmu=%f\n" % (nit,currL, sampreflog, pi, g0, g1))
+            sys.stderr.write("i=%d,L=%f,%scurrpi=%f,currgam=%f,currmu=%f,currham=%d\n" % (nit,currL, sampreflog, pi, g0, g1, currham))
             if self.sample_refs:
                 refi = self.mh_reference_sample(rd, refi)
                 refstr = self.refs[refi]
@@ -274,7 +277,9 @@ class MixtureModelSampler():
                 sampreflog = "sampref=%d," % refi
             if self.sample_strings_gibbs:
                 assert not self.sample_refs, "Only ref sampling OR gibbs is allowed currently."
-                st0,curr_ref_diffs = self.constrained_sample_string(rd, refstr, curr_ref_diffs) 
+#                st0,curr_ref_diffs = self.constrained_sample_string(rd, refstr, curr_ref_diffs) 
+                for j in rd.VALID_INDICES:
+                    st0[j] = self.gibbs_sample_si(rd, j)
             if self.sample_gammas:
                 pi,g0,g1 = self.mh_sample_normal(rd)
             else:
