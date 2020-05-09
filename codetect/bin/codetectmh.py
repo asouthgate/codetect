@@ -84,7 +84,8 @@ if __name__ == "__main__":
     #//*** Collect results ***//
     params = np.array(params)
 
-    print("L,pi,g1,g2,seq")
+    print("i,L,pi,g1,g2,seq")
     for i in range(len(strings)):
-        print("%d,%f,%f,%f,%s" % (i, Ls[i], params[i,0], params[i,1], params[i,2], strings[i]))
+        strseq = "".join([str(c) for c in strings[i]])
+        print("%d,%f,%f,%f,%f,%s" % (i, Ls[i], params[i,0], params[i,1], params[i,2], strseq))
 
