@@ -1,14 +1,14 @@
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from aln import ReadAln
+from pycodetect.aln import ReadAln
 import copy
-from read_aln_data import *
+from pycodetect.read_aln_data import *
 import math
-from utils import *
+from pycodetect.utils import *
 
 class DataSimulator(ReadAlnData):
-    def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, D, MU, COVQ, PAIRED_END=False,TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None):
+    def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, MU, COVQ, PAIRED_END=False,TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None, min_d=0, max_d=99999):
         """ Initialize data simulator class with parameters
         
         Args:
@@ -27,16 +27,16 @@ class DataSimulator(ReadAlnData):
         self.GAMMA = GAMMA
         self.MU = MU
         self.PI = PI
-        self.D = D
+        self.D = min_d
         # Simulate a population
         sys.stderr.write("Generating population\n")
         if TEMPLATE_SEQUENCES == None:
             self.GENOME_LENGTH = GENOME_LENGTH
-            self.major, self.minor = self.gen_pair(GENOME_LENGTH, D)
+            self.major, self.minor = self.gen_pair(GENOME_LENGTH, min_d)
             assert ham(self.major,self.minor) == self.D
         else:
             sys.stderr.write("Picking a reference\n")
-            self.major, self.minor = self.pick_references(TEMPLATE_SEQUENCES, DMAT, D)
+            self.major, self.minor = self.pick_references(TEMPLATE_SEQUENCES, DMAT, min_d, max_d)
             sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
             self.GENOME_LENGTH = len(self.major)
 #            assert ham(self.major,self.minor) >= self.D
@@ -160,7 +160,7 @@ class DataSimulator(ReadAlnData):
         hams = [ham(ms, ref) for ms in minorseqs]
         return minorseqs + [ref], props
 
-    def pick_references(self,refs, dmat, D):
+    def pick_references(self,refs, dmat, D, max_d):
         """Generate a pair of sequence representing the center of two clusters using references.
     
         Args:
@@ -172,7 +172,7 @@ class DataSimulator(ReadAlnData):
         while (mj == None) or (mj == mi):
             mi = random.randint(0,len(refs)-1)
             row = dmat[mi]
-            possinds = np.where(row <= D)[0]
+            possinds = np.where((row >= D) & (row <= max_d))[0]
             if len(possinds) > 0:
                 mj = random.choice(possinds)
         return self.mutate_n(refs[mi],2), self.mutate_n(refs[mj],2)
