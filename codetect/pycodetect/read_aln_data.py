@@ -22,8 +22,8 @@ class ReadAlnData():
         # Build V index
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
-        # Subsample
-        sys.stderr.write("Subsampling across the reference\n")
+#        # Subsample
+#        sys.stderr.write("Subsampling across the reference\n")
 #        self.X = self.subsample()
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
@@ -128,7 +128,7 @@ class ReadAlnData():
                 delinds.add(ri)
         sys.stderr.write("Deleting %d positions\n"% len(delinds))
         if len(delinds) == 0:
-            return True
+            return [j for j in range(len(self._reference))]
         if len(delinds) == len(self._reference):
             raise ValueError("no sites remaining")
         #TODO: figure out if and when it is legitimate to delete these bases from the reads entirely
