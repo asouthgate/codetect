@@ -248,7 +248,7 @@ class EM():
                 assert st[i] == self.consensus[i]
 
     def calc_L0(self):
-        g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.get_consensus()))]))
+        g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
     def do2(self, N_ITS, random_init=False, debug=False, debug_minor=None):
