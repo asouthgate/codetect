@@ -21,6 +21,10 @@ c2i = {"A":0, "C":1, "G":2, "T":3, "-":4, "M":4, "R":4, "Y":4, "S":4, "K":4, "W"
 def str_c2i(s):
     return tuple([c2i[c] for c in s])
 
+def str_i2c(s):
+    return "".join(["ACGT"[c] for c in s])
+
+
 def rev_comp(s):
     s2 = ""
     for c in s[::-1]:

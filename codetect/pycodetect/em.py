@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import random
 import pycodetect.plotter as plotter
-from pycodetect.utils import ham, c2i
+from pycodetect.utils import ham, c2i, logsumexp
 np.set_printoptions(threshold=sys.maxsize)
 
 class EM():
@@ -45,14 +45,9 @@ class EM():
         for i,Xi in enumerate(self.X):
             a = Xi.logPmajor(g0)
             b = Xi.logPminor2(st,g1)
-            l1 = a
-            l2 = b
             lw1 = np.log(pi)
             lw2 = np.log(1-pi)
-            exp1 = np.exp(l1 + lw1)
-            exp2 = np.exp(l2 + lw2)
-            c = exp1 + exp2
-            sumo += np.log(c)
+            sumo += logsumexp([a + lw1, b + lw2])
         return sumo
 
     def print_debug_info(self, Tt, st):
@@ -281,14 +276,17 @@ class EM():
         assert 0 <= gt <= 1,gt
         assert ham(st, self.consensus) >= self.min_d, ham(st, self.consensus)
 
+        trace = []
         for t in range(N_ITS):
+            trace.append([t, self.calc_log_likelihood(st,gt,mut,pit), pit, gt, mut, st])
             self.check_st(st)
             assert pit <= 0.999
             sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
             if pit == 1:
-                sys.stderr.write("No coinfection detected.\n")
-                return self.calc_log_likelihood(st,gt,mut,pit),False,st,pit,gt
+                break
+#                sys.stderr.write("No coinfection detected.\n")
+#                return self.calc_log_likelihood(st,gt,mut,pit),False,st,pit,gt
 
             Tt = self.recalc_T2(pit,gt,st,mut)
             if debug:
@@ -299,8 +297,9 @@ class EM():
             self.gt = gt
             self.pit = pit
             if sum(Tt[:,1]) == 0:
-                sys.stderr.write("No coinfection detected.\n")
-                return self.calc_log_likelihood(st,gt,mut,pit), False, st, pit, gt 
+                break
+#                sys.stderr.write("No coinfection detected.\n")
+#                return self.calc_log_likelihood(st,gt,mut,pit), False, st, pit, gt 
 
             pit = self.recalc_pi(Tt)
             pit = min(0.98, pit)
@@ -314,13 +313,9 @@ class EM():
         if debug:
             plotter.plot_genome(self.ds,Tt,st,debug_minor)
 
-        if pit > 0.99:
-            sys.stderr.write("No coinfection detected!\n")
-            return self.calc_log_likelihood(st,gt,mut,pit), False, st, Tt, pit, gt
+#        /cif pit > 0.99:
+#            sys.stderr.write("No coinfection detected!\n")
+#            return self.calc_log_likelihood(st,gt,mut,pit), False, st, Tt, pit, gt
         
-        sys.stderr.write("Coinfection detected!\n")
-        return self.calc_log_likelihood(st,gt,mut,pit),True, st, Tt, pit, gt
-
-        props = sorted(np.random.dirichlet((1.0,1.0,1.0,1.0,1.0)))
-        props = [p/2 for p in props]
-        props[-1] += 0.5
+#        sys.stderr.write("Coinfection detected!\n")
+        return trace
