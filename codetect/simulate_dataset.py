@@ -45,6 +45,6 @@ if __name__ == "__main__":
     if args.paired_end:
         sp.call("minimap2 -ax sr {ref} {fwd} {rev} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=opfilepref+".1.fq",rev=ofilepref+".2.fq",bam=ofilepref+".bam"), shell=True)
     else:
-        sp.call("minimap2 -ax sr {ref} {fwd} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=ofilepref+".1.fq",bam=ofilepref+".bam"), shell=True)
+        sp.call("minimap2 -ax sr {ref} {fwd} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=ofilepref+".fq",bam=ofilepref+".bam"), shell=True)
     sp.call("samtools index %s" % (ofilepref+".bam"), shell=True)
     sp.call("echo '{paramstr}' > {outcsv}".format(paramstr=" ".join(sys.argv),outcsv=ofilepref+".csv"),shell=True)
