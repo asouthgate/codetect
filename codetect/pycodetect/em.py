@@ -3,7 +3,7 @@ import math
 import numpy as np
 import sys
 import random
-import pycodetect.plotter
+import pycodetect.plotter as plotter
 from pycodetect.utils import ham, c2i
 np.set_printoptions(threshold=sys.maxsize)
 
