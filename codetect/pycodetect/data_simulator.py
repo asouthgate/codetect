@@ -48,7 +48,7 @@ class DataSimulator(ReadAlnData):
             self.minorpop = self.gen_population(self.minor, self.mu)
         else:
             self.majorpop = ([self.major], [1.0])
-            self.minorpop = ([self.major], [1.0])
+            self.minorpop = ([self.minor], [1.0])
         minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
         majorhams = [ham(self.major, s) for s in self.majorpop[0]]
 #        plt.bar(x=majorhams, height=self.majorpop[1])
