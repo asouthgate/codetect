@@ -2,6 +2,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pycodetect.utils import c2i
 
+def plot_m_mat_vs_seqs(rd,major,minor):
+    major_arr = [[0,0,0,0] for i in range(len(major))]
+    for i, c in enumerate(major): major_arr[i][c] = 1.0
+    minor_arr = [[0,0,0,0] for i in range(len(minor))]
+    for i, c in enumerate(minor): minor_arr[i][c] = 1.0
+    for i in range(len(rd.M)):
+        if major_arr[i] != minor_arr[i]:
+            print(i, rd.M[i], major_arr[i], minor_arr[i])    
+
 def plot_genome(rd,T,st,minor):
     """
     Plot estimated coverage for each cluster across the genome,
