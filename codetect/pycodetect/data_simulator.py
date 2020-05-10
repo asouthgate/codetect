@@ -8,40 +8,47 @@ import math
 from pycodetect.utils import *
 
 class DataSimulator(ReadAlnData):
-    def __init__(self, N_READS, READ_LENGTH, GAMMA, PI, MU, COVQ, PAIRED_END=False,TEMPLATE_SEQUENCES=None, DMAT=None, GENOME_LENGTH=None, min_d=0, max_d=99999):
+    def __init__(self, n_reads, read_length, gamma, pi, covq, mu=None,  d=None,paired_end=False,template_sequences=None, dmat=None, genome_length=None, min_d=None, max_d=None):
         """ Initialize data simulator class with parameters
         
         Args:
-            N_READS: int number of reads
-            READ_LENGTH: int read length
-            GENOME_LENGTH: int genome length
-            GAMMA: float gamma error/mutation parameter
-            PI: mixture proportion of major species
+            n_reads: int number of reads
+            read_length: int read length
+            genome_length: int genome length
+            gamma: float gamma error/mutation parameter
+            pi: mixture proportion of major species
             D: hamming distance between major and minor species
-            MU: stick breaking per-base mutation probability within a population
-            COVQ: maximum coverage difference for coverage random walk
+            mu: stick breaking per-base mutation probability within a population
+            covq: maximum coverage difference for coverage random walk
         """
         # Initialize constants
-        self.N_READS = N_READS
-        self.READ_LENGTH = READ_LENGTH
-        self.GAMMA = GAMMA
-        self.MU = MU
-        self.PI = PI
-        self.D = min_d
+        self.paired_end = paired_end
+        self.n_reads = n_reads
+        self.read_length = read_length
+        self.gamma = gamma
+        self.mu = mu
+        self.pi = pi
         # Simulate a population
         sys.stderr.write("Generating population\n")
-        if TEMPLATE_SEQUENCES == None:
-            self.GENOME_LENGTH = GENOME_LENGTH
-            self.major, self.minor = self.gen_pair(GENOME_LENGTH, min_d)
+        if template_sequences == None:
+            assert genome_length is not None
+            assert d is not None
+            self.D = d
+            self.genome_length = genome_length
+            self.major, self.minor = self.gen_pair_random(genome_length, d)
             assert ham(self.major,self.minor) == self.D
         else:
             sys.stderr.write("Picking a reference\n")
-            self.major, self.minor = self.pick_references(TEMPLATE_SEQUENCES, DMAT, min_d, max_d)
+            self.major, self.minor = self.pick_references(template_sequences, dmat, min_d, max_d)
             sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
-            self.GENOME_LENGTH = len(self.major)
+            self.genome_length = len(self.major)
 #            assert ham(self.major,self.minor) >= self.D
-        self.majorpop = self.gen_population(self.major, self.MU)
-        self.minorpop = self.gen_population(self.minor, self.MU)
+        if self.mu is not None:
+            self.majorpop = self.gen_population(self.major, self.mu)
+            self.minorpop = self.gen_population(self.minor, self.mu)
+        else:
+            self.majorpop = ([self.major], [1.0])
+            self.minorpop = ([self.major], [1.0])
         minorhams = [ham(self.minor, s) for s in self.minorpop[0]]
         majorhams = [ham(self.major, s) for s in self.majorpop[0]]
 #        plt.bar(x=majorhams, height=self.majorpop[1])
@@ -50,25 +57,25 @@ class DataSimulator(ReadAlnData):
 #        plt.bar(x=minorhams, height=self.minorpop[1])
 #        plt.title("minorhams")
 #        plt.show()
-        self._MAJOR = self.major
-        self._MINOR = self.minor
+        self._major = self.major
+        self._minor = self.minor
         # Simulate reads
         sys.stderr.write("Simulating reads\n")
-        self.COVWALK = self.random_coverage_walk(COVQ)
-        self.X = self.sample_reads(PAIRED_END)
+        self._covwalk = self.random_coverage_walk(covq)
+        self.X = self.sample_reads(paired_end)
         # Parse data into a ReadData object
 #        super(DataSimulator,self).__init__(self.X,self._MAJOR)
         # In case the number of reads has changed (some have been deleted:)
-#        self.N_READS = sum([Xi.count for Xi in self.X])
+#        self.n_reads = sum([Xi.count for Xi in self.X])
         # Guarantee that the consensus has the highest for each
 #        for ci, c in enumerate(self.get_consensus()):
 #            assert max(self.M[ci]) == self.M[ci][c], (self.M[ci], c)
 
     def get_minor(self):
-        return self._MINOR
+        return self._minor
 
     def get_major(self):
-        return self._MAJOR
+        return self._major
 
     def get_weight_base_array(self, T):
         """
@@ -98,7 +105,7 @@ class DataSimulator(ReadAlnData):
         Args:
             covq: maximum fold coverage difference between minimum and maximum.
         """
-        xs = np.zeros(self.GENOME_LENGTH-self.READ_LENGTH+1)
+        xs = np.zeros(self.genome_length-self.read_length+1)
         x = 0
         for i in range(len(xs)):
             step = random.choice([1,-1])
@@ -184,7 +191,7 @@ class DataSimulator(ReadAlnData):
             newseq[j] = random.choice([c for c in range(4) if c != seq[j]])
         return newseq
 
-    def gen_pair(self,L,D):
+    def gen_pair_random(self,L,D):
         """
         Generate a pair of sequences representing the center of two clusters.
 
@@ -193,7 +200,7 @@ class DataSimulator(ReadAlnData):
             D: Hamming distance between the two
         """
         # Mutates by a fixed number
-        major = [random.choice(range(4)) for i in range(self.GENOME_LENGTH)]
+        major = [random.choice(range(4)) for i in range(self.genome_length)]
         minor = self.mutate_n(major,D)
         return major,minor
 
@@ -211,19 +218,19 @@ class DataSimulator(ReadAlnData):
             A ReadAln object.
         """
         if paired_end:
-            maxind = len(seq)-(2*self.READ_LENGTH+insert_size)+1
-            trunc_covwalk = self.COVWALK[:maxind]/sum(self.COVWALK[:maxind])
-            randpos = np.random.choice(range(maxind), p=trunc_covwalk)
-            sampinds = [randpos+l for l in range(self.READ_LENGTH)]
-            sampinds += [randpos+self.READ_LENGTH+insert_size+l for l in range(self.READ_LENGTH)]
+            maxind = len(seq)-(2*self.read_length+insert_size)+1
+            prob_covwalk = self._covwalk[:maxind]/sum(self.covwalk[:maxind])
+            randpos = np.random.choice(range(maxind), p=prob_covwalk)
+            sampinds = [randpos+l for l in range(self.read_length)]
+            sampinds += [randpos+self.read_length+insert_size+l for l in range(self.read_length)]
         else:
-            randpos = np.random.choice(range(len(seq)-self.READ_LENGTH+1), p=self.COVWALK)
-            sampinds = [randpos+l for l in range(self.READ_LENGTH)]
+            randpos = np.random.choice(range(len(seq)-self.read_length+1), p=self._covwalk)
+            sampinds = [randpos+l for l in range(self.read_length)]
         aln = ReadAln(label)
         for si in sampinds:
             roll = random.uniform(0,1)
             c = seq[si]
-            if roll < self.GAMMA:
+            if roll < self.gamma:
                 alt = random.choice([z for z in range(4) if z != c])
                 aln.append_mapped_base(si,alt)
             else:
@@ -237,12 +244,12 @@ class DataSimulator(ReadAlnData):
         Return:
             X: a list of ReadAln objects sampled from the simulated population.
         """
-        w = [self.PI, 1-self.PI]
+        w = [self.pi, 1-self.pi]
         assert w[0] == max(w), "first sequence should be the major var"
         X = []
         pops = [self.majorpop, self.minorpop]   
         # Generate random coverage
-        for i in range(self.N_READS):
+        for i in range(self.n_reads):
             seqi = np.random.choice([0,1],p=w)
             popseqs, popfreqs = pops[seqi]
             subseqi = np.random.choice(range(len(popseqs)), p=popfreqs)
@@ -255,14 +262,20 @@ class DataSimulator(ReadAlnData):
         return X
 
 def write_reads(ds, opref):
-    pairs = [aln.get_fq_entry_pair() for aln in ds.X]
-    fwd,rev = zip(*pairs)
-    with open(opref + ".1.fq", "w") as of1:
-        for l in fwd:
-            of1.write(l)
-    with open(opref + ".2.fq", "w") as of2:
-        for l in rev:
-            of2.write(l)        
+    if ds.paired_end:
+        pairs = [aln.get_fq_entry_pair() for aln in ds.X]
+        fwd,rev = zip(*pairs)
+        with open(opref + ".1.fq", "w") as of1:
+            for l in fwd:
+                of1.write(l)
+        with open(opref + ".2.fq", "w") as of2:
+            for l in rev:
+                of2.write(l)        
+    else:
+        reads = [aln.get_fq_entry_single() for aln in ds.X]
+        with open(opref + ".fq", "w") as of1:
+            for l in reads:
+                of1.write(l)
 
 def write_refs(ds, opref):
     with open(opref + ".major.fa", "w") as of1:
@@ -293,7 +306,7 @@ if __name__ == "__main__":
     refs = [[c2i[c] for c in str(r.seq).upper()] for r in SeqIO.parse(args.refs, "fasta")]
     dmat = np.load(args.dmat)
 
-    ds = DataSimulator(args.n_reads,args.read_length,args.gamma,args.pi,args.D,args.mu,args.covq,PAIRED_END=args.paired_end,TEMPLATE_SEQUENCES=refs, DMAT=dmat) 
+    ds = DataSimulator(args.n_reads,args.read_length,args.gamma,args.pi,args.D,args.mu,args.covq,paired_end=args.paired_end,template_sequences=refs, dmat=dmat) 
     write_reads(ds,args.out)
     write_refs(ds,args.out)
 
