@@ -58,6 +58,11 @@ class ReadAln():
         second = "@"+str(self.name)+"/2\n"+rev_comp(secondseq)+"\n+\n"+"I"*len(secondseq)+"\n"
         return first, second
 
+    def get_fq_entry_single(self):
+        firstseq = self.get_aln_segments()[0]
+        first = "@"+str(self.name)+"/1\n"+firstseq+"\n+\n"+"I"*len(firstseq)+"\n"
+        return first
+
     def cal_ham(self,S): 
         # DEPRECIATED, SOMEHOW
         h = 0
