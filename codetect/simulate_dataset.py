@@ -9,6 +9,7 @@ if __name__ == "__main__":
     import numpy as np
     import subprocess as sp
     import sys
+    import pickle
 
     parser = argparse.ArgumentParser(description="Detect Coinfection!")
     parser.add_argument("--pi", required=True, type=float)
@@ -48,3 +49,6 @@ if __name__ == "__main__":
         sp.call("minimap2 -ax sr {ref} {fwd} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=ofilepref+".fq",bam=ofilepref+".bam"), shell=True)
     sp.call("samtools index %s" % (ofilepref+".bam"), shell=True)
     sp.call("echo '{paramstr}' > {outcsv}".format(paramstr=" ".join(sys.argv),outcsv=ofilepref+".csv"),shell=True)
+    pickleof= open(ofilepref+".pckl",'wb')
+    pickle.dump(ds,pickleof)
+    pickleof.close()
