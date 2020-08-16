@@ -1,0 +1,14 @@
+import numpy as np
+
+if __name__ == "__main__":
+    # Let's be explicit instead of implicit:
+    i = 0
+    nreads = 5000
+    covq = 3
+    read_length = 200
+    mu = 0.0005
+    for pi in np.linspace(0.7,1.0,num=50,endpoint=False):
+        for gamma in [0.01, 0.02, 0.03]:
+            string = "python3 simulate_dataset.py --n_reads {nreads} --refs res/H3N2_HA_nfu.m.fa --dmat res/H3N2_HA_nfu.dmat.npy --min_d 1 --max_d 1000 --pi {pi} --read_length {read_length} --gamma {gamma} --covq {covq} --mu {mu} --out_prefix tmp/runA2_%d".format(pi=pi,gamma=gamma,nreads=nreads,read_length=read_length,covq=covq,mu=mu) % i
+            i += 1
+            print(string)
