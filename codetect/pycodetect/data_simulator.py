@@ -65,7 +65,7 @@ class DataSimulator(ReadAlnData):
         self._covwalk = self.random_coverage_walk(covq)
         self.X = self.sample_reads(paired_end)
         # Parse data into a ReadData object
-#        super(DataSimulator,self).__init__(self.X,self._MAJOR)
+        super(DataSimulator,self).__init__(self.X,self.major)
         # In case the number of reads has changed (some have been deleted:)
 #        self.n_reads = sum([Xi.count for Xi in self.X])
         # Guarantee that the consensus has the highest for each
