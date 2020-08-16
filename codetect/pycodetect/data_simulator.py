@@ -8,7 +8,7 @@ import math
 from pycodetect.utils import *
 
 class DataSimulator(ReadAlnData):
-    def __init__(self, n_reads, read_length, gamma, pi, covq, mu=None,  d=None,paired_end=False,template_sequences=None, dmat=None, genome_length=None, min_d=None, max_d=None):
+    def __init__(self, n_reads, read_length, gamma, pi, covq=None, mu=None,  d=None,paired_end=False,template_sequences=None, dmat=None, genome_length=None, min_d=None, max_d=None):
         """ Initialize data simulator class with parameters
         
         Args:
@@ -62,7 +62,12 @@ class DataSimulator(ReadAlnData):
         self._minor = self.minor
         # Simulate reads
         sys.stderr.write("Simulating reads\n")
-        self._covwalk = self.random_coverage_walk(covq)
+        if cov is not None:
+            self._covwalk = self.random_coverage_walk(covq)
+        else:
+            self._covwalk = np.ones(self.genome_length-self.read_length+1)
+            self._coverwalk /= sum(self._covwalk)
+        
         self.X = self.sample_reads(paired_end)
         # Parse data into a ReadData object
         super(DataSimulator,self).__init__(self.X,self.major)
