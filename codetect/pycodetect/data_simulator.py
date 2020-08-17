@@ -62,11 +62,11 @@ class DataSimulator(ReadAlnData):
         self._minor = self.minor
         # Simulate reads
         sys.stderr.write("Simulating reads\n")
-        if cov is not None:
+        if covq is not None:
             self._covwalk = self.random_coverage_walk(covq)
         else:
             self._covwalk = np.ones(self.genome_length-self.read_length+1)
-            self._coverwalk /= sum(self._covwalk)
+            self._covwalk /= sum(self._covwalk)
         
         self.X = self.sample_reads(paired_end)
         # Parse data into a ReadData object

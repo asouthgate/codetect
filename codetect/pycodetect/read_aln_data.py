@@ -99,7 +99,7 @@ class ReadAlnData():
 
     def build_Vindex(self): 
         """ Build a reference pos with c -> reads mapping to pos index. """
-        Vindex = [[[] for c in range(4)] for i in range(len(self._reference))]
+        Vindex = [[[] for c in range(5)] for i in range(len(self._reference))]
         for i,Xi in enumerate(self.X):
             for pos, c in Xi.get_aln():
                 Vindex[pos][c].append(i)

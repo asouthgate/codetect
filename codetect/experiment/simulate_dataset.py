@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument("--gamma", required=True, type=float)
     parser.add_argument("--n_reads", required=True, type=int)
     parser.add_argument("--genome_length", default=None, required=False, type=int)
-    parser.add_argument("--covq", required=True, type=int)
+    parser.add_argument("--covq", required=False, type=int, default=None)
     parser.add_argument("--read_length", required=True, type=int)
     parser.add_argument("--mu", required=False, type=float)
     parser.add_argument("--refs", default=None, required=False)
