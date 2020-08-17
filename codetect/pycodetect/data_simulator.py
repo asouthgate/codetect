@@ -235,7 +235,7 @@ class DataSimulator(ReadAlnData):
         aln = ReadAln(label)
         for si in sampinds:
             roll = random.uniform(0,1)
-            c = seq[si]:
+            c = seq[si]
             if roll < self.gamma:
                 alt = random.choice([z for z in range(4) if z != c])
                 aln.append_mapped_base(si,alt)
@@ -264,7 +264,9 @@ class DataSimulator(ReadAlnData):
             lab = str(i)+"_"+indicstr
             aln = self.gen_aln(lab,seq,paired_end)
             aln.z = seqi
-            X.append(aln)
+            # Discard any reads that cover regions not covered
+            if 4 not in aln.get_ints():
+                X.append(aln)
         return X
 
 def write_reads(ds, opref):
