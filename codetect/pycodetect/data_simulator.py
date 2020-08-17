@@ -235,7 +235,7 @@ class DataSimulator(ReadAlnData):
         aln = ReadAln(label)
         for si in sampinds:
             roll = random.uniform(0,1)
-            c = seq[si]
+            c = seq[si]:
             if roll < self.gamma:
                 alt = random.choice([z for z in range(4) if z != c])
                 aln.append_mapped_base(si,alt)
