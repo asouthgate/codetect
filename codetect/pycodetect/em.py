@@ -307,12 +307,13 @@ class EM():
 
             old_pi = pit
             pit = self.recalc_pi(Tt)
-            if np.abs(old_pi-pit) < 0.0000001:
-                break
             pit = min(0.98, pit)
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
+            old_st = st
             st = self.recalc_st(Tt, self.min_d)     
+            if np.abs(old_pi-pit) < 0.0001 and old_st == st:
+                break
 #            mut = gt
             mut = self.recalc_mu(Tt, st)
 #            mut = min(max(mut, 0.0001), 0.05)
