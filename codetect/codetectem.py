@@ -31,15 +31,16 @@ if __name__ == "__main__":
     alns = collect_alns(args.bam)
     ref = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.ref, "fasta")][0]
     rad = ReadAlnData(alns, ref)
+    rad.filter(100)
 
     #//*** EM ***
     em = EM(rad,args.mind)
 #[t, self.calc_log_likelihood(st,gt,mut,pit), pit, gt, mut
     if not args.debug_minor:
-        trace = em.do2(20)
+        trace = em.do2()
     else:
         dbm = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.debug_minor, "fasta")][0] 
-        trace = em.do2(20,debug=True,debug_minor=dbm)
+        trace = em.do2(debug=True,debug_minor=dbm)
     L0 = em.calc_L0()
     nsites = len(em.ds.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:

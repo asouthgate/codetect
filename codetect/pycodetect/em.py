@@ -16,7 +16,6 @@ class EM():
     """
     def __init__(self, ds, min_d):
         self.ds = ds
-        self.ds.filter(99)
         self.X = ds.X
         self.n_reads = sum([Xi.count for Xi in self.X])
         self.M = ds.M
@@ -251,7 +250,7 @@ class EM():
         g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
-    def do2(self, N_ITS, random_init=False, debug=False, debug_minor=None):
+    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None):
         pit = 0.5
         gt = 0.01
         mut = 0.01
@@ -277,7 +276,12 @@ class EM():
         assert ham(st, self.consensus) >= self.min_d, ham(st, self.consensus)
 
         trace = []
-        for t in range(N_ITS):
+        t = 0
+        while True:
+            if N_ITS is not None:
+                if t > N_ITS: 
+                    break
+            
             trace.append([t, self.calc_log_likelihood(st,gt,mut,pit), pit, gt, mut, st])
             self.check_st(st)
             assert pit <= 0.999
@@ -301,7 +305,10 @@ class EM():
 #                sys.stderr.write("No coinfection detected.\n")
 #                return self.calc_log_likelihood(st,gt,mut,pit), False, st, pit, gt 
 
+            old_pi = pit
             pit = self.recalc_pi(Tt)
+            if np.abs(old_pi-pit) < 0.0000001:
+                break
             pit = min(0.98, pit)
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
@@ -309,6 +316,7 @@ class EM():
 #            mut = gt
             mut = self.recalc_mu(Tt, st)
 #            mut = min(max(mut, 0.0001), 0.05)
+            t += 1
 
         if debug:
             plotter.plot_genome(self.ds,Tt,st,debug_minor)

@@ -44,11 +44,11 @@ class ReadAlnData():
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
 
-    def filter(self,t):
+    def filter(self,n):
         """ Mask low-variance positions. """
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-        self.VALID_INDICES = self.get_indices(t=t)
+        self.VALID_INDICES = self.get_indices_max_window(n=n)
         self.test_v_array() 
 
     def pos2reads(self,i):
@@ -117,6 +117,26 @@ class ReadAlnData():
             if sum(mat[ri]) > 0:
                 mat[ri] /= sum(mat[ri])
         return Cmat, mat
+
+    def get_indices_max_window(self, n=100, windowsize=200, mindepth=20):
+        """ Mask uninteresting positions of the matrix if not in top n  """
+        n_windows = int(len(self.V_INDEX)/windowsize)
+        n_per_window = int(n/n_windows)
+        assert n_per_window > 1
+        max_indices = []
+        for winl in range(0,len(self.V_INDEX)-windowsize,windowsize):
+            scores = {}
+            winu = winl+windowsize
+            for ri in range(winl,winu):
+                row = self.M[ri]
+                if sum([len(k) for k in self.V_INDEX[ri]]) > mindepth:
+                    scores[ri] = sorted(row)[-2]
+            sort = sorted([(i,q) for i,q in scores.items()],key=lambda x:x[1])
+            wmaxs = [(i,q) for i,q in sort[-n_per_window:]]
+            print(wmaxs)
+            wmaxinds = [i for i,q in wmaxs]
+            max_indices += wmaxinds
+        return np.array(max_indices)
 
     def get_indices(self,t=0.97,mindepth=20):
         """ Mask uninteresting positions of the matrix. """

@@ -32,7 +32,7 @@ if __name__ == "__main__":
     alns = collect_alns(args.bam)
     ref = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.ref, "fasta")][0]
     rad = ReadAlnData(alns, ref)
-    rad.filter(0.98)
+    rad.filter(100)
 
     #//*** Debugging
     if not args.debug:
@@ -47,14 +47,14 @@ if __name__ == "__main__":
         vs = np.argsort(row)[2:]
         valid_states.append(vs)
 
-    sys.stderr.write("%d valid indices identified" % len(valid_inds))
+    sys.stderr.write("%d valid indices identified\n" % len(valid_inds))
     #//*** Initialize sampler ***
 #      randy = [random.randint(0,3) for j in range(len(rad.get_consensus()))]
     randy = [c for c in rad.get_consensus()]
     mms = MixtureModelSampler(rad, rad.get_consensus(), allowed_states=valid_states, allowed_positions=valid_inds, initstring=randy, min_d = args.mind)
 
     #//*** Sample ***//
-    strings,params,Ls = mms.sample(rad,nits=5)
+    strings,params,Ls = mms.sample(rad,nits=100)
 
     #//*** Collect results ***//
     params = np.array(params)
