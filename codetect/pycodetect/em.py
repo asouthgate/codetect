@@ -112,7 +112,7 @@ class EM():
         assert deno > 0
         newmu = numo/deno
         assert 0 <= newmu <= 1,newmu
-        return min(newmu,0.5)
+        return newmu
 
     def recalc_gamma(self,T):
         nms = [Xi.nm_major for Xi in self.X]
@@ -250,14 +250,17 @@ class EM():
         g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
-    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None):
+    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None):
         pit = 0.5
         gt = 0.01
         mut = 0.01
-        if random_init:
-            st = self.init_st_random(self.M)
+        if fixed_st is None:
+            if random_init:
+                st = self.init_st_random(self.M)
+            else:
+                st = self.init_st(self.M)
         else:
-            st = self.init_st(self.M)
+            st = fixed_st
         # Assertions
         for row in self.M:
             for v in row:
@@ -274,6 +277,7 @@ class EM():
         assert len(self.V_index) == len(self.M)
         assert 0 <= gt <= 1,gt
         assert ham(st, self.consensus) >= self.min_d, ham(st, self.consensus)
+
 
         trace = []
         t = 0
@@ -307,16 +311,20 @@ class EM():
 
             old_pi = pit
             pit = self.recalc_pi(Tt)
-            pit = min(0.98, pit)
+#            pit = max(min_pi,min(max_pi, pit))
+            pit = max(min_pi,min(max_pi,pit))
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
             old_st = st
-            st = self.recalc_st(Tt, self.min_d)     
+            if fixed_st is None:
+                st = self.recalc_st(Tt, self.min_d)     
+            else:
+                st = fixed_st
             if np.abs(old_pi-pit) < 0.0001 and old_st == st:
                 break
 #            mut = gt
             mut = self.recalc_mu(Tt, st)
-#            mut = min(max(mut, 0.0001), 0.05)
+            mut = min(max(mut, 0.0001), 0.05)
             t += 1
 
         if debug:
