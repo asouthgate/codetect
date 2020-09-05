@@ -250,7 +250,7 @@ class EM():
         g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
-    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None):
+    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None, max_pi=0.9999, min_pi=0.5, fixed_st=None):
         pit = 0.5
         gt = 0.01
         mut = 0.01
@@ -281,12 +281,14 @@ class EM():
 
         trace = []
         t = 0
+        Lt = self.calc_log_likelihood(st,gt,mut,pit)
         while True:
             if N_ITS is not None:
                 if t > N_ITS: 
                     break
-            
-            trace.append([t, self.calc_log_likelihood(st,gt,mut,pit), pit, gt, mut, st])
+            Ltold = Lt
+            Lt = self.calc_log_likelihood(st,gt,mut,pit)
+            trace.append([t, Lt, pit, gt, mut, st])
             self.check_st(st)
             assert pit <= 0.999
             sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.consensus)]) + "\n")
@@ -320,7 +322,7 @@ class EM():
                 st = self.recalc_st(Tt, self.min_d)     
             else:
                 st = fixed_st
-            if np.abs(old_pi-pit) < 0.0001 and old_st == st:
+            if np.abs(Ltold-Lt) < 0.00001 and np.abs(old_pi-pit) < 0.0001 and old_st == st:
                 break
 #            mut = gt
             mut = self.recalc_mu(Tt, st)
