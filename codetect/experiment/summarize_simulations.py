@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+sys.path.append("./")
 import matplotlib.pyplot as plt
 import pickle
 
@@ -9,10 +10,10 @@ def ham(s1,s2):
 mean_snps = []
 ranked_proportions = []
 pair_ds = []
+print("paird,majorexp,minorexp,majorvar,minorvar,majormax,minormax,covmean,covvar,readmean,readvar")
 for folder in sys.argv[1:]:
     opref = folder.rstrip("/").split("/")[-1]
     pckfn = folder+"/"+opref+".pckl"
-    print("paird,majorexp,minorexp,majorvar,minorvar,majormax,minormax,covmean,covvar,readmean,readvar")
     with open(pckfn, 'rb') as f:
         ds = pickle.load(f)
         pair_d = ham(ds.major,ds.minor)
