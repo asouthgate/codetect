@@ -31,7 +31,7 @@ if __name__ == "__main__":
     alns = collect_alns(args.bam)
     ref = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.ref, "fasta")][0]
     rad = ReadAlnData(alns, ref)
-    rad.filter(150)
+    rad.filter(100)
 
     #//*** EM ***
     em = EM(rad,args.mind)
@@ -43,7 +43,7 @@ if __name__ == "__main__":
         trace = em.do2(debug=True,debug_minor=dbm)
 #    L0 = em.calc_L0()
     sys.stderr.write("Calculating H0\n")
-    alt_trace = em.do2(min_pi=0.98,fixed_st=trace[-1][-1])
+    alt_trace = em.do2(min_pi=1.0,fixed_st=trace[-1][-1])
     nsites = len(em.ds.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:
         f.write("nsites\n%d" % (nsites))

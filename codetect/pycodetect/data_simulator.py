@@ -36,10 +36,12 @@ class DataSimulator(ReadAlnData):
             self.D = d
             self.genome_length = genome_length
             self.major, self.minor = self.gen_pair_random(genome_length, d)
+            assert len(self.major) == len(self.minor)
             assert ham(self.major,self.minor) == self.D
         else:
             sys.stderr.write("Picking a reference\n")
             self.major, self.minor = self.pick_references(template_sequences, dmat, min_d, max_d)
+            assert len(self.major) == len(self.minor), (template_sequences, len(self.major), len(self.minor))
             sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
             self.genome_length = len(self.major)
 #            assert ham(self.major,self.minor) >= self.D

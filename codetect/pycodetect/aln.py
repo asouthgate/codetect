@@ -19,6 +19,8 @@ class ReadAln():
         self.count = 1
         self.z = None
         self.aln = None
+        #TODO: remove somehow; this is for only the em.py
+        self.prev_logPminor2 = None
 
     def __repr__(self):
         s = ""
@@ -123,6 +125,18 @@ class ReadAln():
             if c != consensus[bp]:
                 self.nm_major += 1            
         return self.nm_major
+
+    def calc_nm_minor(self, minorcon):
+        # TODO: THIS IS SLOW. SHOULD BE CACHED 
+        """ Calculate the number of mismatches to the reference. """
+        if self.nm_minor != None:
+            assert False, "Refusing to recalculate constant nm"
+        self.nm_minor = 0
+        for bp,c in self.get_aln():
+#            if self.i2c(c) != consensus[p+self.pos]:
+            if c != consensus[bp]:
+                self.nm_minor += 1 
+        return self.nm_minor
             
     def logPmajor(self, gamma):
         """ Calculate Pr aln given that it belongs to the major group.
@@ -150,20 +164,37 @@ class ReadAln():
             res = 0
         return res
 
-    def logPminor2(self, st, mu):
+    def logPminor2(self, mu, st, changed_inds=None):
         """ Calculate Pr aln given that it belongs to minor group.
 
         Args:
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
-        sumo = 0
-        for bp,c in self.get_aln():
-            if c == st[bp]:
-                sumo += np.log(1-mu)
-            else:
-                sumo += np.log(mu)
+        if changed_inds is not None:
+            sumo = self.prev_logPminor2
+            for bp in changed_inds:
+    #            for bp,c in self.get_aln():
+                if bp in self.map:
+                    c = self.map[bp]
+                    if c == st[bp]:
+                        # previously it didnt match
+                        sumo -= np.log(mu)
+                        sumo += np.log(1-mu)
+                    else:
+                        # previously it did match
+                        sumo -= np.log(1-mu)
+                        sumo += np.log(mu)
+        else:
+            sumo = 0
+            for bp,c in self.get_aln():
+                if c == st[bp]:
+                    # previously it didnt match
+                    sumo += np.log(1-mu)
+                else:
+                    # previously it did match
+                    sumo += np.log(mu)
+        self.prev_logPminor2 = sumo
         return sumo
-
 
 if __name__ == "__main__":
     import random

@@ -43,7 +43,7 @@ class EM():
         sumo = 0
         for i,Xi in enumerate(self.X):
             a = Xi.logPmajor(g0)
-            b = Xi.logPminor2(st,g1)
+            b = Xi.logPminor2(g1,st)
             lw1 = np.log(pi)
             lw2 = np.log(1-pi)
             sumo += logsumexp([a + lw1, b + lw2])
@@ -55,7 +55,7 @@ class EM():
             print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
 
 
-    def calTi_pair2(self,Xi,pi,g0,st,g1):
+    def calTi_pair2(self,Xi,pi,g0,g1,st,changed_inds):
         # TODO: depreciate; import calculator function
         """ Calculate the ith membership conditional probability array element.
         
@@ -64,9 +64,13 @@ class EM():
             g0: gamma parameter for cluster 0
             st: cluster 1 string
             g1: gamma parameter for cluster 1
+
+        Returns:
+            tp: T array
+            lp: L array of Xi given cluster j
         """
         a = Xi.logPmajor(g0)
-        b = Xi.logPminor2(st,g1)
+        b = Xi.logPminor2(g1,st,changed_inds)
 #        assert 0 <= a <= 1, a
 #        assert 0 <= b <= 1, b
 #        print(a,b)
@@ -97,14 +101,17 @@ class EM():
 #        assert t1i > 0, t1i
 #        assert t2i > 0, t2i
         assert sum(tp) > 0.999, sum(tp)
-        return tp
+        return tp, np.log(c)
  
-    def recalc_T2(self,pi,g,st,mu):
+    def recalc_T2(self,pi,g,st,mu,changed_inds=None):
         res = []
+        # Also calculate the log likelihood while we're at it
+        Lt = 0
         for Xi in self.X:
-            pair = self.calTi_pair2(Xi,pi,g,st,mu)
-            res.append(pair)
-        return np.array(res)
+            pairT, logL = self.calTi_pair2(Xi,pi,g,mu,st,changed_inds)
+            res.append(pairT)
+            Lt += logL
+        return np.array(res), Lt
 
     def recalc_mu(self,T, S):
         numo = sum([T[i,1]*Xi.count*Xi.cal_ham(S) for i,Xi in enumerate(self.X)])
@@ -250,7 +257,7 @@ class EM():
         g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
-    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None, max_pi=0.9999, min_pi=0.5, fixed_st=None):
+    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None, mu_equals_gamma=True):
         pit = 0.5
         gt = 0.01
         mut = 0.01
@@ -282,23 +289,26 @@ class EM():
         trace = []
         t = 0
         Lt = self.calc_log_likelihood(st,gt,mut,pit)
+        changed_inds = None
         while True:
             if N_ITS is not None:
                 if t > N_ITS: 
                     break
-            Ltold = Lt
-            Lt = self.calc_log_likelihood(st,gt,mut,pit)
             trace.append([t, Lt, pit, gt, mut, st])
             self.check_st(st)
-            assert pit <= 0.999
-            sys.stderr.write("Iteration:%d" % t + str([pit,gt,mut,ham(st,self.consensus)]) + "\n")
+            assert pit <= max_pi
+            sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
             if pit == 1:
                 break
 #                sys.stderr.write("No coinfection detected.\n")
 #                return self.calc_log_likelihood(st,gt,mut,pit),False,st,pit,gt
 
-            Tt = self.recalc_T2(pit,gt,st,mut)
+            Ltold = Lt
+            Tt,Lt = self.recalc_T2(pit,gt,st,mut,changed_inds)
+#            Ltval = self.calc_log_likelihood(st,gt,mut,pit)
+#            assert np.abs(Lt-Ltval) < 0.000001, (Lt,Ltval)
+
             if debug:
                 plotter.plot_genome(self.ds,Tt,st,debug_minor)
 #            self.print_debug_info(Tt,st)
@@ -322,11 +332,13 @@ class EM():
                 st = self.recalc_st(Tt, self.min_d)     
             else:
                 st = fixed_st
-            if np.abs(Ltold-Lt) < 0.00001 and np.abs(old_pi-pit) < 0.0001 and old_st == st:
+            changed_inds = [sti for sti in range(len(st)) if st[sti] != old_st[sti]]
+            if np.abs(Ltold-Lt) < 0.001 and np.abs(old_pi-pit) < 0.001 and old_st == st:
                 break
-#            mut = gt
-            mut = self.recalc_mu(Tt, st)
-            mut = min(max(mut, 0.0001), 0.05)
+            mut = gt
+            if not mu_equals_gamma:
+                mut = self.recalc_mu(Tt, st)
+                mut = min(max(mut, 0.0001), 0.05)
             t += 1
 
         if debug:
