@@ -299,13 +299,14 @@ class EM():
             assert pit <= max_pi
             sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
-            if pit == 1:
-                break
+            Ltold = Lt
+            Tt,Lt = self.recalc_T2(pit,gt,st,mut,changed_inds)
+#            if pit == 1:
+#                break
 #                sys.stderr.write("No coinfection detected.\n")
 #                return self.calc_log_likelihood(st,gt,mut,pit),False,st,pit,gt
 
-            Ltold = Lt
-            Tt,Lt = self.recalc_T2(pit,gt,st,mut,changed_inds)
+
 #            Ltval = self.calc_log_likelihood(st,gt,mut,pit)
 #            assert np.abs(Lt-Ltval) < 0.000001, (Lt,Ltval)
 
@@ -340,6 +341,12 @@ class EM():
                 mut = self.recalc_mu(Tt, st)
                 mut = min(max(mut, 0.0001), 0.05)
             t += 1
+        trace.append([t, Lt, pit, gt, mut, st])
+        self.check_st(st)
+        assert pit <= max_pi
+        sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham(st,self.consensus)]) + "\n")
+
+
 
         if debug:
             plotter.plot_genome(self.ds,Tt,st,debug_minor)

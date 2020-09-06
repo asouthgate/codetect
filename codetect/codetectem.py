@@ -43,6 +43,8 @@ if __name__ == "__main__":
         trace = em.do2(debug=True,debug_minor=dbm)
 #    L0 = em.calc_L0()
     sys.stderr.write("Calculating H0\n")
+    L0 = em.calc_L0()
+    sys.stderr.write("L0: %f\n" % L0)
     alt_trace = em.do2(min_pi=1.0,fixed_st=trace[-1][-1])
     nsites = len(em.ds.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:
