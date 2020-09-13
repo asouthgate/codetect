@@ -19,6 +19,26 @@ from pycodetect.utils import str_c2i, str_i2c
 import sys
 import argparse
 
+def preprocess_refs(ref_fname, s0_h, min_d=None):
+    from Bio import FastaIO
+    # Pull out header for s0
+    s0_msa_seq = ""
+    recs = FastaIO.SimpleFastaParser(ref_fname)
+    for h,s in recs: 
+        if h == s0_h:
+            s0_msa_seq = s
+    # Pull out valid indices
+    valinds = [j for j,c in enumerate(s0_msa_seq) if c =! "-"]
+    # Remove indels relative to s0
+    recs2 = []
+    for h,s in recs:
+        d = 0
+        s2 = ""
+        for i in valinds:
+            s2 += s[i]
+        recs2.append((h,s2))
+    return recs2
+
 if __name__ == "__main__":
     #//*** Parse args ***
     parser = argparse.ArgumentParser()
@@ -26,12 +46,18 @@ if __name__ == "__main__":
     parser.add_argument("-ref", type=str, required=True)
     parser.add_argument("-out", type=str, required=True)
     parser.add_argument("-mind", type=int, required=True)
+    parser.add_argument("-ref_msa", type=str, required=False, default=None)
     parser.add_argument("-debug_minor", type=str, required=False, default=None)
     args = parser.parse_args()
     alns = collect_alns(args.bam)
-    ref = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.ref, "fasta")][0]
+    ref_rec = [r for r in SeqIO.parse(args.ref, "fasta")][0]
+    ref = str(ref_rec.seq)
     rad = ReadAlnData(alns, ref)
     rad.filter(100)
+
+    #*** Using a fixed reference panel
+    if args.ref_msa is not None:
+        ref_panel = preprocess_refs(args.ref_msa, ref_rec.description)
 
     #//*** EM ***
     em = EM(rad,args.mind)

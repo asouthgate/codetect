@@ -150,6 +150,17 @@ class EM():
         return ststar        
 
     def get_weight_base_array(self, T):
+        """ Computes an array of weights W corresponding to:
+            W[i,j] = \sum_ri T_ri x delta(ri,j), where
+            delta(ri,j) is 1 if read i has base j at that
+            position.
+        
+        Args: 
+            T: T array with probability of membership
+
+        Returns:
+            W: a weight array in |X| x 4 
+        """
         baseweights = np.zeros((len(self.consensus), 4))
         # FIRST CALCULATE THE MOST WEIGHTY BASE FOR EACH POSITION
         for k in self.ds.VALID_INDICES:
@@ -167,7 +178,12 @@ class EM():
         return baseweights
 
     def recalc_st(self,T,minh):
-        # BUILD THE MAXIMUM STRING
+        """ Calculating the string that maximizes Q 
+
+        Args:
+            T : T array as in EM
+            minh : minimum distance allowable to consensus
+        """
         baseweights = self.get_weight_base_array(T)
         ststar = [c for c in self.consensus]
         for bi in self.ds.VALID_INDICES:
@@ -182,7 +198,21 @@ class EM():
             return ststar
         else:
             return self.regularize_st(ststar,baseweights,diff)
-#            return ststar
+
+    def recalc_st_refs(self,T,refs):
+        """ Calculate the string s that maximizes Q such that s in refs.
+
+        Args:
+            T : T array as in EM
+            refs : allowed reference strings s can be in 
+        """
+        W = self.get_weight_base_array(T)
+        # Create scores for every ref
+        refscores = np.zeros(len(refs))
+        for ri,ref in enumerate(refs):
+            refscores[ri] = sum([W[bi, ref[bi]] for bi in self.ds.VALID_INDICES])
+        maxind = np.argmax(refscores)
+        return refs[maxind]  
  
     def recalc_V(self,T):
         # Regularize by claiming that the probability of a mismatch can never be less than MIN_THRESHOLD
@@ -250,14 +280,17 @@ class EM():
         g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
-    def do2(self, N_ITS=None, random_init=False, debug=False, debug_minor=None):
+    def do2(self, ref_panel=None,N_ITS=None, random_init=False, debug=False, debug_minor=None):
         pit = 0.5
         gt = 0.01
         mut = 0.01
         if random_init:
             st = self.init_st_random(self.M)
         else:
-            st = self.init_st(self.M)
+            if ref_panel is None:
+                st = self.init_st(self.M)
+            else:
+                st = random.choice(ref_panel)
         # Assertions
         for row in self.M:
             for v in row:
@@ -311,7 +344,10 @@ class EM():
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
             old_st = st
-            st = self.recalc_st(Tt, self.min_d)     
+            if ref_panel is None:
+                st = self.recalc_st(Tt, self.min_d)     
+            else:
+                st = self.recalc_st(Tt, ref_panel)
             if np.abs(old_pi-pit) < 0.0001 and old_st == st:
                 break
 #            mut = gt
