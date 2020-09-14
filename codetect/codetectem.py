@@ -83,13 +83,23 @@ if __name__ == "__main__":
     else:
         dbm = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.debug_minor, "fasta")][0] 
         trace = em.do2(debug=True,debug_minor=dbm)
+<<<<<<< HEAD
             
+=======
+#    L0 = em.calc_L0()
+    sys.stderr.write("Calculating H0\n")
+>>>>>>> 36ee9e94ec57ed8df45d86113f6be04b7fdd924c
     L0 = em.calc_L0()
+    sys.stderr.write("L0: %f\n" % L0)
+    alt_trace = em.do2(min_pi=1.0,fixed_st=trace[-1][-1])
     nsites = len(em.ds.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:
-        f.write("L0,nsites\n%f,%d" % (L0,nsites))
+        f.write("nsites\n%d" % (nsites))
     with open(args.out+".trace.csv", "w") as f:
         for line in trace:
+            f.write(",".join([str(s) for s in line][:-1])+"\n")
+    with open(args.out+".alt_trace.csv", "w") as f:
+        for line in alt_trace:
             f.write(",".join([str(s) for s in line][:-1])+"\n")
     with open(args.out+".est.fa", "w") as f:
        f.write(">1\n%s" % str_i2c(trace[-1][-1]) )

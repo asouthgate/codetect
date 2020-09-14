@@ -4,11 +4,12 @@
 if __name__ == "__main__":
     import argparse 
     from Bio import SeqIO
+    import sys
+    sys.path.append("./")
     from pycodetect.data_simulator import DataSimulator, write_reads, write_refs
     from pycodetect.utils import c2i
     import numpy as np
     import subprocess as sp
-    import sys
     import pickle
 
     parser = argparse.ArgumentParser(description="Detect Coinfection!")
