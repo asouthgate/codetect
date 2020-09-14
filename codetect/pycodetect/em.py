@@ -290,6 +290,7 @@ class EM():
             if ref_panel is None:
                 st = self.init_st(self.M)
             else:
+                assert len(ref_panel) > 0, "Ref panel is empty"
                 st = random.choice(ref_panel)
         # Assertions
         for row in self.M:
