@@ -217,7 +217,7 @@ class EM():
         # Create scores for every ref
         refscores = np.zeros(len(refs))
         for ri,ref in enumerate(refs):
-            refh,refstr = ref
+            refh, refstr = ref
             refscores[ri] = sum([W[bi, refstr[bi]] for bi in self.ds.VALID_INDICES])
         maxind = np.argmax(refscores)
         return refs[maxind]  
@@ -333,6 +333,8 @@ class EM():
             trace.append([t, Lt, pit, gt, mut, st])
 #            self.check_st(st)
             assert pit <= max_pi
+            if ref_panel is None:
+                refht = "NA"
             sys.stderr.write("Iteration:%d" % t + str([Lt,refht,pit,gt,mut,ham(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
             Ltold = Lt
