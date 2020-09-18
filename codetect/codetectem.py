@@ -40,18 +40,18 @@ def preprocess_refs(ref_fname, s0_h, min_d=None):
         s2 = ""
         for i in nongapinds:
             # TODO: change this; remove this  on implementation of "N"s
-            if s[i] != "-":
+            if s[i] in "ACGT":
                 s2 += s[i]
             else: 
                 s2 += s0_msa_seq[i]
         assert len(s2) == len(s0_seq)
         d = ham(s0_seq,s2) 
-        if set(s2) == set("ACGT"):
-            if min_d is not None:
-                if d > min_d:
-                    recs2.append((h,str_c2i(s2)))
-            else:
+#        if set(s2) == set("ACGT"):
+        if min_d is not None:
+            if d > min_d:
                 recs2.append((h,str_c2i(s2)))
+        else:
+            recs2.append((h,str_c2i(s2)))
     # TODO: unnecessary
     for h,s  in recs2:
         assert 4 not in s        
