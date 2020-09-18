@@ -217,7 +217,8 @@ class EM():
         # Create scores for every ref
         refscores = np.zeros(len(refs))
         for ri,ref in enumerate(refs):
-            refscores[ri] = sum([W[bi, ref[bi]] for bi in self.ds.VALID_INDICES])
+            refh,refstr = ref
+            refscores[ri] = sum([W[bi, refstr[bi]] for bi in self.ds.VALID_INDICES])
         maxind = np.argmax(refscores)
         return refs[maxind]  
  
@@ -279,6 +280,7 @@ class EM():
         return st
 
     def check_st(self, st):
+        assert len(st) == len(self.consensus), (len(st), len(self.consensus))
         for i in range(len(st)):
             if i not in self.ds.VALID_INDICES:
                 assert st[i] == self.consensus[i]
@@ -299,7 +301,7 @@ class EM():
                     st = self.init_st(self.M)
                 else:
                     assert len(ref_panel) > 0, "Ref panel is empty"
-                    st = random.choice(ref_panel)
+                    refht,st = random.choice(ref_panel)
         else:
             st = fixed_st
         # Assertions
@@ -329,9 +331,9 @@ class EM():
                 if t > N_ITS: 
                     break
             trace.append([t, Lt, pit, gt, mut, st])
-            self.check_st(st)
+#            self.check_st(st)
             assert pit <= max_pi
-            sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham(st,self.consensus)]) + "\n")
+            sys.stderr.write("Iteration:%d" % t + str([Lt,refht,pit,gt,mut,ham(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
             Ltold = Lt
             Tt,Lt = self.recalc_T2(pit,gt,st,mut,changed_inds)
@@ -364,7 +366,7 @@ class EM():
             gt = min(max(gt, 0.0001), 0.05)
             old_st = st
             if ref_panel is not None:
-                st = self.recalc_st(Tt, ref_panel)
+                refht,st = self.recalc_st_refs(Tt, ref_panel)
             elif fixed_st is None:
                 st = self.recalc_st(Tt, self.min_d)     
             else:
@@ -378,7 +380,7 @@ class EM():
                 mut = min(max(mut, 0.0001), 0.05)
             t += 1
         trace.append([t, Lt, pit, gt, mut, st])
-        self.check_st(st)
+#        self.check_st(st)
         assert pit <= max_pi
         sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham(st,self.consensus)]) + "\n")
 

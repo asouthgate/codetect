@@ -24,29 +24,32 @@ def preprocess_refs(ref_fname, s0_h, min_d=None):
     # Pull out header for s0
     s0_msa_seq = ""
     with open(ref_fname) as f:
-        recs = [r for r in FastaIO.SimpleFastaParser(f)]
+        recs = [(h,s.upper()) for h,s in FastaIO.SimpleFastaParser(f)]
     for h,s in recs: 
         if h == s0_h:
             s0_msa_seq = s
             break
+    s0_seq = s0_msa_seq.replace("-","")
     assert len(s0_msa_seq) > 0, "Reference %s not found in msa" % s0_h
     # Pull out valid indices
     print(s0_msa_seq)
-    valinds = [j for j,c in enumerate(s0_msa_seq) if c != "-"]
-    print("Valid inds:", valinds)
+    nongapinds = [j for j,c in enumerate(s0_msa_seq) if c != "-"]
+    print("Valid inds:", nongapinds)
     # Remove indels relative to s0
     recs2 = []
     for h,s in recs:
-        d = 0
+        assert len(s) == len(s0_msa_seq)
         s2 = ""
-        for i in valinds:
+        for i in nongapinds:
             s2 += s[i]
-        d = ham(s0_msa_seq,s2) 
-        if min_d is not None:
-            if d > min_d:
+        assert len(s2) == len(s0_seq)
+        d = ham(s0_seq,s2) 
+        if "-" not in s2:
+            if min_d is not None:
+                if d > min_d:
+                    recs2.append((h,str_c2i(s2)))
+            else:
                 recs2.append((h,str_c2i(s2)))
-        else:
-            recs2.append((h,str_c2i(s2)))
     return recs2
 
 if __name__ == "__main__":
@@ -67,6 +70,7 @@ if __name__ == "__main__":
 
     #*** Using a fixed reference panel
     if args.ref_msa is not None:
+        # Preprocess refs to get panel sequences
         ref_panel = preprocess_refs(args.ref_msa, ref_rec.description, min_d=args.mind)
 
     #//*** EM ***
@@ -83,12 +87,8 @@ if __name__ == "__main__":
     else:
         dbm = [str_c2i(str(r.seq)) for r in SeqIO.parse(args.debug_minor, "fasta")][0] 
         trace = em.do2(debug=True,debug_minor=dbm)
-<<<<<<< HEAD
-            
-=======
 #    L0 = em.calc_L0()
     sys.stderr.write("Calculating H0\n")
->>>>>>> 36ee9e94ec57ed8df45d86113f6be04b7fdd924c
     L0 = em.calc_L0()
     sys.stderr.write("L0: %f\n" % L0)
     alt_trace = em.do2(min_pi=1.0,fixed_st=trace[-1][-1])
