@@ -30,6 +30,8 @@ class DataSimulator(ReadAlnData):
         self.pi = pi
         # Simulate a population
         sys.stderr.write("Generating population\n")
+        self.major_h = None
+        self.minor_h = None
         if template_sequences == None:
             assert genome_length is not None
             assert d is not None
@@ -40,8 +42,8 @@ class DataSimulator(ReadAlnData):
             assert ham(self.major,self.minor) == self.D
         else:
             sys.stderr.write("Picking a reference\n")
-            self.major, self.minor = self.pick_references(template_sequences, dmat, min_d, max_d)
-            assert len(self.major) == len(self.minor), (template_sequences, len(self.major), len(self.minor))
+            self.major, self.minor, self.major_h, self.minor_h = self.pick_references(template_sequences, dmat, min_d, max_d)
+#            assert len(self.major) == len(self.minor), (len(self.major), len(self.minor))
             sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
             self.genome_length = len(self.major)
 #            assert ham(self.major,self.minor) >= self.D
@@ -190,7 +192,7 @@ class DataSimulator(ReadAlnData):
             possinds = np.where((row >= D) & (row <= max_d))[0]
             if len(possinds) > 0:
                 mj = random.choice(possinds)
-        return self.mutate_n(refs[mi],2), self.mutate_n(refs[mj],2)
+        return self.mutate_n(refs[mi][1],2), self.mutate_n(refs[mj][1],2), refs[mi][0], refs[mj][0]
 
     def mutate_n(self,seq,n):
         newseq = [c for c in seq]
@@ -288,10 +290,15 @@ def write_reads(ds, opref):
                 of1.write(l)
 
 def write_refs(ds, opref):
+    major_h = "major"
+    minor_h = "minor"
+    if ds.major_h is not None:
+        major_h = ds.major_h
+        minor_h = ds.minor_h
     with open(opref + ".major.fa", "w") as of1:
-        of1.write(">major\n"+"".join(["ACGT"[c] for c in ds.major if c != 4]))
+        of1.write((">%s\n" % major_h) + "".join(["ACGT"[c] for c in ds.major if c != 4]))
     with open(opref + ".minor.fa", "w") as of2:
-        of2.write(">minor\n"+"".join(["ACGT"[c] for c in ds.minor if c != 4]))
+        of2.write((">%s\n" % minor_h) + "".join(["ACGT"[c] for c in ds.minor if c != 4]))
 
 if __name__ == "__main__":
     import argparse 
