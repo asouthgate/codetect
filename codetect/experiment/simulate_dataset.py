@@ -1,18 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-def only_ACGT(c):
-    if c in "ACGT":
-        return c
-    return "N"
-
 if __name__ == "__main__":
     import argparse 
     from Bio import SeqIO
     import sys
     sys.path.append("./")
     from pycodetect.data_simulator import DataSimulator, write_reads, write_refs
-    from pycodetect.utils import c2i
+    from pycodetect.utils import c2i, only_ACGT
     import numpy as np
     import subprocess as sp
     import pickle
@@ -37,7 +32,7 @@ if __name__ == "__main__":
     # TODO: record headers as well
     if args.refs is not None:
         assert args.dmat is not None
-        refs = [(r.description,[c2i[only_ACGT(c)] for c in str(r.seq).upper().replace("-","")]) for r in SeqIO.parse(args.refs, "fasta")]
+        refs = [(r.description,[c2i[only_ACGT(c)] for c in str(r.seq).upper()]) for r in SeqIO.parse(args.refs, "fasta")]
         dmat = np.load(args.dmat)
         ds = DataSimulator(args.n_reads,args.read_length,args.gamma,args.pi,args.covq,paired_end=args.paired_end,template_sequences=refs, dmat=dmat, min_d=args.min_d, max_d=args.max_d, mu=args.mu) 
     else:
@@ -50,7 +45,7 @@ if __name__ == "__main__":
     write_reads(ds,ofilepref)
     write_refs(ds,ofilepref)
     if args.paired_end:
-        sp.call("minimap2 -ax sr {ref} {fwd} {rev} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=opfilepref+".1.fq",rev=ofilepref+".2.fq",bam=ofilepref+".bam"), shell=True)
+        sp.call("minimap2 -ax sr {ref} {fwd} {rev} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=ofilepref+".1.fq",rev=ofilepref+".2.fq",bam=ofilepref+".bam"), shell=True)
     else:
         sp.call("minimap2 -ax sr {ref} {fwd} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=ofilepref+".fq",bam=ofilepref+".bam"), shell=True)
     sp.call("samtools index %s" % (ofilepref+".bam"), shell=True)
