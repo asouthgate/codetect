@@ -55,7 +55,7 @@ class EM():
             print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
 
 
-    def calTi_pair2(self,Xi,pi,g0,g1,st,changed_inds):
+    def calTi_pair2(self,Xi,pi,g0,g1,st,prevst,changed_inds):
         # TODO: depreciate; import calculator function
         """ Calculate the ith membership conditional probability array element.
         
@@ -69,8 +69,19 @@ class EM():
             tp: T array
             lp: L array of Xi given cluster j
         """
+        if changed_inds is None:
+            assert st == prevst
         a = Xi.logPmajor(g0)
-        b = Xi.logPminor2(g1,st,changed_inds)
+        b = Xi.logPminor2(g1,st,prevst,changed_inds)
+#        sys.stderr.write("WARNING: SLOW VALI LIKELIHOOD CALC\n")
+#        if changed_inds is not None:
+#            sci = set(changed_inds)
+#            for di in range(len(st)):
+#                if di in sci: assert prevst[di] != st[di]
+#                else: assert prevst[di] == st[di]
+#        bval = Xi.logPminor2(g1,st)
+#        assert np.abs(b-bval) < 0.0000001, (b,bval)
+
 #        assert 0 <= a <= 1, a
 #        assert 0 <= b <= 1, b
 #        print(a,b)
@@ -88,7 +99,12 @@ class EM():
 #        assert exp1 > 0
 #        assert exp2 > 0
         c = exp1 + exp2
-        assert 0 < c <= 1.01,c
+        if not 0 < c <= 1.01:
+            print(Xi.get_aln())
+            print(c)
+            print(exp1, exp2)
+            print(a, b)
+            assert False
         t1i = exp1/c
         t2i = exp2/c
 #        c = pi*a + (1-pi)*b
@@ -103,12 +119,12 @@ class EM():
         assert sum(tp) > 0.999, sum(tp)
         return tp, np.log(c)
  
-    def recalc_T2(self,pi,g,st,mu,changed_inds=None):
+    def recalc_T2(self,pi,g,st,mu,prev_st,changed_inds=None):
         res = []
         # Also calculate the log likelihood while we're at it
         Lt = 0
         for Xi in self.X:
-            pairT, logL = self.calTi_pair2(Xi,pi,g,mu,st,changed_inds)
+            pairT, logL = self.calTi_pair2(Xi,pi,g,mu,st,prev_st,changed_inds)
             res.append(pairT)
             Lt += logL
         return np.array(res), Lt
@@ -206,23 +222,37 @@ class EM():
         else:
             return self.regularize_st(ststar,baseweights,diff)
 
-    def recalc_st_refs(self,T,refs):
+    def recalc_st_refs(self,T,refs,curr_ri):
         """ Calculate the string s that maximizes Q such that s in refs.
 
         Args:
             T : T array as in EM
-            refs : allowed reference strings s can be in 
+            refs : RefPanel object with permissible refs
         """
         W = self.get_weight_base_array(T)
         # Create scores for every ref
-        refscores = np.zeros(len(refs))
-        for ri,ref in enumerate(refs):
-            refh, refstr = ref
-            refscores[ri] = sum([W[bi, refstr[bi]] for bi in self.ds.VALID_INDICES if refstr[bi] < 4])
-        for ind in np.argsort(refscores):
-            print(refscores[ind], refs[ind][0])
+        assert refs.size() > 0
+        refscores = np.zeros(refs.size())
+        conscores = [W[bi, self.consensus[bi]] for bi in self.ds.VALID_INDICES]
+        conscore = sum(conscores)
+        for ri in range(refs.size()):
+            refh, refstr = refs.get_ref(ri)
+            # First set it to be the same as consensus
+            refscores[ri] = conscore
+            # Now add and remove based on differences
+            for bi in refs.get_diff_inds(ri):
+                refscores[ri] -= conscores[bi]
+                refscores[ri] += W[bi, refstr[bi]]
+
+#        for ri,ref in enumerate(refs):
+#            refh, refstr = ref
+#            refscores[ri] = sum([W[bi, refstr[bi]] for bi in self.ds.VALID_INDICES if refstr[bi] < 4])
+
+#        for ind in np.argsort(refscores):
+#            print(refscores[ind], refs[ind][0])
         maxind = np.argmax(refscores)
-        return refs[maxind]  
+        rh, rseq = refs.get_ref(maxind)
+        return maxind, rh, rseq
  
     def recalc_V(self,T):
         # Regularize by claiming that the probability of a mismatch can never be less than MIN_THRESHOLD
@@ -291,7 +321,9 @@ class EM():
         g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
         return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
 
-    def do2(self, ref_panel=None,N_ITS=None, random_init=False, debug=False, debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None, mu_equals_gamma=True):
+    def do2(self, ref_panel=None, N_ITS=None, random_init=False, debug=False,
+             debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None,
+             mu_equals_gamma=True):
         pit = 0.5
         gt = 0.01
         mut = 0.01
@@ -302,8 +334,7 @@ class EM():
                 if ref_panel is None:
                     st = self.init_st(self.M)
                 else:
-                    assert len(ref_panel) > 0, "Ref panel is empty"
-                    refht,st = random.choice(ref_panel)
+                    curr_ri, refht, st = ref_panel.get_random_ref()
         else:
             st = fixed_st
         # Assertions
@@ -328,7 +359,8 @@ class EM():
         trace = []
         t = 0
         Lt = self.calc_log_likelihood(st,gt,mut,pit)
-        changed_inds = None
+        changed_inds = []
+        old_st = st
         while True:
             
             # Check breaking conditions
@@ -344,7 +376,7 @@ class EM():
             sys.stderr.write("Iteration:%d" % t + str([Lt,refht,pit,gt,mut,ham_nogaps(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
             Ltold = Lt
-            Tt,Lt = self.recalc_T2(pit,gt,st,mut,changed_inds)
+            Tt, Lt = self.recalc_T2(pit,gt,st,mut,old_st,changed_inds)
 
             # Plot if debugging
             if debug:
@@ -366,16 +398,18 @@ class EM():
             pit = max(min_pi,min(max_pi,pit))
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
-            old_st = st
     
             # Recalculate string
+            old_st = st
             if ref_panel is not None:
-                refht, st = self.recalc_st_refs(Tt, ref_panel)
+                curr_ri, refht, st = self.recalc_st_refs(Tt, ref_panel, curr_ri)
             elif fixed_st is None:
                 st = self.recalc_st(Tt, self.min_d)     
             else:
                 st = fixed_st
             changed_inds = [sti for sti in range(len(st)) if st[sti] != old_st[sti]]
+        
+
             if np.abs(Ltold-Lt) < 0.001 and np.abs(old_pi-pit) < 0.001 and old_st == st:
                 break
             mut = gt
