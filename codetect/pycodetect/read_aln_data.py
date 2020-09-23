@@ -40,6 +40,7 @@ class ReadAlnData():
         self.C, self.M = self.reads2mats()
         # Recompute consensus to be actual consensus
         self._CONSENSUS = tuple(np.argmax(v) for v in self.M)
+        assert 4 not in self._CONSENSUS
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()

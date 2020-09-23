@@ -15,10 +15,9 @@ import numpy as np
 from pycodetect.bam_importer import collect_alns
 from pycodetect.em import EM
 from pycodetect.read_aln_data import ReadAlnData
-from pycodetect.utils import str_c2i, str_i2c, ham, str_only_ACGT, preprocess_msa_refs
+from pycodetect.utils import str_c2i, str_i2c, ham, str_only_ACGT
 from pycodetect.plotter import plot_mask
 from pycodetect.ref_panel import RefPanel
-import sys
 import argparse
 
 
@@ -54,9 +53,8 @@ if __name__ == "__main__":
         if args.ref_msa is None:
             trace = em.do2()
         else:
-            assert len(ref_panel) > 0
-            rp = RefPanel(args.ref_msa, ref_rec.description, min_d=args.mind)
-            trace = em.do2(ref_panel=ref_panel)
+            rp = RefPanel(em.consensus, args.ref_msa, ref_rec.description, min_d=args.mind)
+            trace = em.do2(ref_panel=rp)
     else:
         dbm = [str_c2i(str_only_ACGT(str(r.seq))) for r in SeqIO.parse(args.debug_minor, "fasta")][0] 
         if args.ref_msa is None:
@@ -64,8 +62,8 @@ if __name__ == "__main__":
             trace = em.do2(debug_minor=dbm,debug=True)
         else:
             sys.stderr.write("running with ref panel\n")
-            assert len(ref_panel) > 0
-            trace = em.do2(ref_panel=ref_panel,debug_minor=dbm,debug=True)
+            rp = RefPanel(em.consensus, args.ref_msa, ref_rec.description, min_d=args.mind)
+            trace = em.do2(ref_panel=rp,debug_minor=dbm,debug=True)
 
 #    L0 = em.calc_L0()
     sys.stderr.write("Calculating H0\n")
@@ -82,6 +80,6 @@ if __name__ == "__main__":
         for line in alt_trace:
             f.write(",".join([str(s) for s in line][:-1])+"\n")
     with open(args.out+".est.fa", "w") as f:
-       f.write(">1\n%s" % str_i2c(trace[-1][-1]) )
+        f.write(">1\n%s" % str_i2c(trace[-1][-1]) )
 
 

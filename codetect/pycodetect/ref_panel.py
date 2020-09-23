@@ -1,11 +1,35 @@
+from pycodetect.utils import str_c2i, ham_nogaps_str, str_only_ACGT
+from Bio.SeqIO import FastaIO 
+import numpy as np
+import random
+import sys
+
 class RefPanel():
-    def __init__(self, ref_msa, s0_h, min_d):
+    def __init__(self, cons, ref_msa, s0_h, min_d):
+        assert type(cons[0]) == np.int64, type(cons[0])
+        assert 4 not in cons
         self._s0_h = s0_h
-        self._s0_s, self._ref_panel = preprocess_msa_refs(args.ref_msa,
-                                                  ref_rec.description, 
-                                                  min_d=args.mind)
+        self._s0_s, self._ref_panel = self.preprocess_msa_refs(ref_msa, s0_h, min_d=min_d)
         self._ref_diff_inds = []
         self._min_d = min_d
+        # Consensus should never have a 4 in it; convert any 4s to cons seq
+        for ri in range(len(self._ref_panel)):
+            h,s = self._ref_panel[ri]
+            s = list(s)
+            for ci, c in enumerate(s):
+                if s[ci] == 4: s[ci] = cons[ci]
+            self._ref_panel[ri] = (h,tuple(s))
+        sys.stderr.write("WARNING: SLOW TEST\n")
+        for h,r in self._ref_panel: assert 4 not in r
+        self.cal_diff_inds(cons)
+        assert len(self._ref_panel) > 0
+        assert len(self._ref_panel) == len(self._ref_diff_inds), (len(self._ref_panel), len(self._ref_diff_inds))
+        for h,s in self._ref_panel: assert len(s) == len(cons)
+
+    def get_random_ref(self):
+        ri = random.randint(0,len(self._ref_panel)-1)
+        rh, rseq = self._ref_panel[ri]
+        return ri, rh, rseq
 
     def cal_diff_inds(self, cons):
         """ Calculate an index for each record that gives the
@@ -19,8 +43,40 @@ class RefPanel():
             self._ref_diff_inds.append(cdiff)
 
     def get_diff_inds(self, ri):
-        """ Get the diff inds for ref ri. """
         return self._ref_diff_inds[ri]
+
+    def size(self):
+        return len(self._ref_diff_inds)
+    
+    def get_ref(self, ri):
+        return self._ref_panel[ri]
+
+    def get_diff_inds_pair(self, ri, rj):
+        """ Get the diff inds between ref ri and rj. """
+        ridiff = set(self._ref_diff_inds[ri])
+        rjdiff = set(self._ref_diff_inds[rj])
+        union = ridiff.union(rjdiff)
+        inter = ridiff.intersection(rjdiff)
+        riseq = self._ref_panel[ri][1]
+        rjseq = self._ref_panel[rj][1]
+        resdiffs = []
+        # Iterate through all dis
+        for di in union:
+            # If both have di
+            if di in inter:
+                if riseq[di] != rjseq[di]: resdiffs.append(di)
+            else:
+                # Otherwise one is equal to ref, one is not
+                assert "N" not in [riseq[di], rjseq[di]]
+                resdiffs.append(di)
+        sys.stderr.write("WARNING: SLOW CHECK! DISABLE FOR NON DEBUGGING MODE\n")
+        rds = set(resdiffs)
+        for ci in range(len(riseq)):
+            if riseq[ci] != rjseq[ci]:
+                assert ci in rds
+            else:
+                assert ci not in rds
+        return resdiffs
 
     def preprocess_msa_refs(self, ref_fname, s0_h, min_d=None):
         """ Preprocess MSA references by cutting out any
