@@ -40,11 +40,13 @@ class DataSimulator(ReadAlnData):
             self.major, self.minor = self.gen_pair_random(genome_length, d)
             assert len(self.major) == len(self.minor)
             assert ham(self.major,self.minor) == self.D
+            self.genome_length = len(self.major)
         else:
             sys.stderr.write("Picking a reference\n")
             self.major, self.minor, self.major_h, self.minor_h = self.pick_references(template_sequences, dmat, min_d, max_d)
-#            assert len(self.major) == len(self.minor), (len(self.major), len(self.minor))
+            assert len(self.major) == len(self.minor), (len(self.major), len(self.minor))
             sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
+            sys.stderr.write("References chosen of length: %d,%d\n" % (len(self.major), len(self.minor)))
             self.genome_length = len(self.major)
 #            assert ham(self.major,self.minor) >= self.D
         if self.mu is not None:
@@ -71,7 +73,7 @@ class DataSimulator(ReadAlnData):
         else:
             self._covwalk = np.ones(self.genome_length-self.read_length+1)
             self._covwalk /= sum(self._covwalk)
-        
+        assert len(self.major) == len(self.minor)
         self.X = self.sample_reads(paired_end)
         # Parse data into a ReadData object
         super(DataSimulator,self).__init__(self.X,self.major)
@@ -177,7 +179,7 @@ class DataSimulator(ReadAlnData):
         hams = [ham(ms, ref) for ms in minorseqs]
         return minorseqs + [ref], props
 
-    def pick_references(self,refs, dmat, D, max_d):
+    def pick_references(self, refs, dmat, D, max_d):
         """Generate a pair of sequence representing the center of two clusters using references.
     
         Args:
@@ -186,6 +188,8 @@ class DataSimulator(ReadAlnData):
             D: minimum distance between them.
         """
         mj = None
+        for h,s in refs:
+            assert len(s) == len(refs[0][1]), "Refs of unequal length: %s, %d" % (h,len(s))
         while (mj == None) or (mj == mi):
             mi = random.randint(0,len(refs)-1)
             row = dmat[mi]
@@ -228,9 +232,10 @@ class DataSimulator(ReadAlnData):
             A ReadAln object.
         """
         if paired_end:
-            maxind = len(seq)-(2*self.read_length+insert_size)+1
-            prob_covwalk = self._covwalk[:maxind]/sum(self.covwalk[:maxind])
-            randpos = np.random.choice(range(maxind), p=prob_covwalk)
+            maxind = len(seq) - 2*self.read_length - insert_size + 1
+            covp = self._covwalk[:maxind]
+            covp /= sum(covp)
+            randpos = np.random.choice(range(maxind), p=covp)
             sampinds = [randpos+l for l in range(self.read_length)]
             sampinds += [randpos+self.read_length+insert_size+l for l in range(self.read_length)]
         else:
@@ -259,7 +264,9 @@ class DataSimulator(ReadAlnData):
         X = []
         pops = [self.majorpop, self.minorpop]   
         # Generate random coverage
-        for i in range(self.n_reads):
+#        for i in range(self.n_reads):
+        i = 0
+        while i < self.n_reads:
             seqi = np.random.choice([0,1],p=w)
             popseqs, popfreqs = pops[seqi]
             subseqi = np.random.choice(range(len(popseqs)), p=popfreqs)
@@ -271,6 +278,7 @@ class DataSimulator(ReadAlnData):
             # Discard any reads that cover regions not covered
             if 4 not in aln.get_ints():
                 X.append(aln)
+                i += 1
         return X
 
 def write_reads(ds, opref):
@@ -296,9 +304,9 @@ def write_refs(ds, opref):
         major_h = ds.major_h
         minor_h = ds.minor_h
     with open(opref + ".major.fa", "w") as of1:
-        of1.write((">%s\n" % major_h) + "".join(["ACGT"[c] for c in ds.major if c != 4]))
+        of1.write((">%s\n" % major_h) + "".join(["ACGTN"[c] for c in ds.major]))
     with open(opref + ".minor.fa", "w") as of2:
-        of2.write((">%s\n" % minor_h) + "".join(["ACGT"[c] for c in ds.minor if c != 4]))
+        of2.write((">%s\n" % minor_h) + "".join(["ACGTN"[c] for c in ds.minor]))
 
 if __name__ == "__main__":
     import argparse 
