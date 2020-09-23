@@ -1,5 +1,7 @@
+from Bio.SeqIO import FastaIO
 import math
 import numpy as np
+import sys
 
 def logsumexp(logls):
     m = max(logls)
@@ -16,6 +18,12 @@ def approx(a,b,eps=0.000001):
 def ham(s1,s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i]])
 
+def ham_nogaps(s1,s2):
+    return sum([1 for i in range(len(s1)) if s1[i] != s2[i] and 4 not in [s1[i],s2[i]]])
+
+def ham_nogaps_str(s1,s2):
+    return sum([1 for i in range(len(s1)) if s1[i] != s2[i] and "N" not in [s1[i],s2[i]]])
+
 c2i = {"A":0, "C":1, "G":2, "T":3, "-":4, "M":4, "R":4, "Y":4, "S":4, "K":4, "W":4, "V":4, "H":4, "N":4, "X":4}
 
 def str_c2i(s):
@@ -23,7 +31,6 @@ def str_c2i(s):
 
 def str_i2c(s):
     return "".join(["ACGT"[c] for c in s])
-
 
 def rev_comp(s):
     s2 = ""
@@ -48,3 +55,11 @@ def ham_early_bail(s1, s2, min_d):
         if sumo >= min_d:
             return sumo
     return sumo
+
+def only_ACGT(c):
+    if c in "ACGT":
+        return c
+    return "N"
+
+def str_only_ACGT(s):
+    return "".join([only_ACGT(c) for c in s])
