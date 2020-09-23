@@ -1,5 +1,6 @@
 import numpy as np
 from pycodetect.utils import rev_comp
+import sys
 
 class ReadAln():
     """Read alignment class.
@@ -20,7 +21,8 @@ class ReadAln():
         self.z = None
         self.aln = None
         #TODO: remove somehow; this is for only the em.py
-        self.prev_logPminor2 = None
+#        self.prev_logPminor2 = None
+        self.nm_minor = None
 
     def __repr__(self):
         s = ""
@@ -164,37 +166,43 @@ class ReadAln():
             res = 0
         return res
 
-    def logPminor2(self, mu, st, changed_inds=None):
+    def logPminor2(self, mu, st, prevst=None, changed_inds=None):
         """ Calculate Pr aln given that it belongs to minor group.
 
         Args:
             M: Lx4 categorical marginal distributions (sum(M[i]) = 1)
         """
         if changed_inds is not None:
-            sumo = self.prev_logPminor2
+#            sys.stderr.write("Not None ci\n")
+#            print(changed_inds)
+#            assert self.prev_logPminor2 is not None
+#            sumo = self.prev_logPminor2
             for bp in changed_inds:
     #            for bp,c in self.get_aln():
                 if bp in self.map:
                     c = self.map[bp]
                     if c == st[bp]:
-                        # previously it didnt match
-                        sumo -= np.log(mu)
-                        sumo += np.log(1-mu)
+                        assert c != prevst[bp]
+                        # previously it didnt match, now it does
+#                        sumo -= np.log(mu)
+#                        sumo += np.log(1-mu)
+                        self.nm_minor -= 1
                     else:
-                        # previously it did match
-                        sumo -= np.log(1-mu)
-                        sumo += np.log(mu)
+                        assert c == prevst[bp]
+                        # previously it did match, now it does not
+#                        sumo -= np.log(1-mu)
+#                        sumo += np.log(mu)
+                        self.nm_minor += 1
         else:
-            sumo = 0
+            self.nm_minor = 0
             for bp,c in self.get_aln():
                 if c == st[bp]:
-                    # previously it didnt match
-                    sumo += np.log(1-mu)
+                    pass
                 else:
-                    # previously it did match
-                    sumo += np.log(mu)
-        self.prev_logPminor2 = sumo
-        return sumo
+                    self.nm_minor += 1
+        matches = len(self.map)-self.nm_minor
+        self.prev_logPminor2 = np.log(mu)*self.nm_minor + np.log(1-mu)*matches
+        return self.prev_logPminor2
 
 if __name__ == "__main__":
     import random
