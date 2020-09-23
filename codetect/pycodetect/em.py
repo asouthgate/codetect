@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import random
 import pycodetect.plotter as plotter
-from pycodetect.utils import ham, c2i, logsumexp
+from pycodetect.utils import ham, c2i, logsumexp, ham_nogaps
 np.set_printoptions(threshold=sys.maxsize)
 
 class EM():
@@ -218,7 +218,9 @@ class EM():
         refscores = np.zeros(len(refs))
         for ri,ref in enumerate(refs):
             refh, refstr = ref
-            refscores[ri] = sum([W[bi, refstr[bi]] for bi in self.ds.VALID_INDICES])
+            refscores[ri] = sum([W[bi, refstr[bi]] for bi in self.ds.VALID_INDICES if refstr[bi] < 4])
+        for ind in np.argsort(refscores):
+            print(refscores[ind], refs[ind][0])
         maxind = np.argmax(refscores)
         return refs[maxind]  
  
@@ -305,6 +307,7 @@ class EM():
         else:
             st = fixed_st
         # Assertions
+        assert len(st) == len(self.consensus), (len(st), len(self.consensus))
         for row in self.M:
             for v in row:
                 assert not np.isnan(v)
@@ -327,48 +330,47 @@ class EM():
         Lt = self.calc_log_likelihood(st,gt,mut,pit)
         changed_inds = None
         while True:
+            
+            # Check breaking conditions
             if N_ITS is not None:
                 if t > N_ITS: 
                     break
+
+            # Output trace
             trace.append([t, Lt, pit, gt, mut, st])
-#            self.check_st(st)
             assert pit <= max_pi
             if ref_panel is None:
                 refht = "NA"
-            sys.stderr.write("Iteration:%d" % t + str([Lt,refht,pit,gt,mut,ham(st,self.consensus)]) + "\n")
+            sys.stderr.write("Iteration:%d" % t + str([Lt,refht,pit,gt,mut,ham_nogaps(st,self.consensus)]) + "\n")
             assert ham(st, self.consensus) >= self.min_d
             Ltold = Lt
             Tt,Lt = self.recalc_T2(pit,gt,st,mut,changed_inds)
-#            if pit == 1:
-#                break
-#                sys.stderr.write("No coinfection detected.\n")
-#                return self.calc_log_likelihood(st,gt,mut,pit),False,st,pit,gt
 
-
-#            Ltval = self.calc_log_likelihood(st,gt,mut,pit)
-#            assert np.abs(Lt-Ltval) < 0.000001, (Lt,Ltval)
-
+            # Plot if debugging
             if debug:
                 plotter.plot_genome(self.ds,Tt,st,debug_minor)
-#            self.print_debug_info(Tt,st)
+
+            # Store variables
             self.st = st
             self.Tt = Tt
             self.gt = gt
             self.pit = pit
+        
+            # If probability has become 1; return
             if sum(Tt[:,1]) == 0:
                 break
-#                sys.stderr.write("No coinfection detected.\n")
-#                return self.calc_log_likelihood(st,gt,mut,pit), False, st, pit, gt 
 
+            # Recalculate scalars
             old_pi = pit
             pit = self.recalc_pi(Tt)
-#            pit = max(min_pi,min(max_pi, pit))
             pit = max(min_pi,min(max_pi,pit))
             gt = self.recalc_gamma(Tt)
             gt = min(max(gt, 0.0001), 0.05)
             old_st = st
+    
+            # Recalculate string
             if ref_panel is not None:
-                refht,st = self.recalc_st_refs(Tt, ref_panel)
+                refht, st = self.recalc_st_refs(Tt, ref_panel)
             elif fixed_st is None:
                 st = self.recalc_st(Tt, self.min_d)     
             else:
@@ -381,19 +383,12 @@ class EM():
                 mut = self.recalc_mu(Tt, st)
                 mut = min(max(mut, 0.0001), 0.05)
             t += 1
+
         trace.append([t, Lt, pit, gt, mut, st])
-#        self.check_st(st)
         assert pit <= max_pi
-        sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham(st,self.consensus)]) + "\n")
-
-
+        sys.stderr.write("Iteration:%d" % t + str([Lt,pit,gt,mut,ham_nogaps(st,self.consensus)]) + "\n")
 
         if debug:
             plotter.plot_genome(self.ds,Tt,st,debug_minor)
 
-#        /cif pit > 0.99:
-#            sys.stderr.write("No coinfection detected!\n")
-#            return self.calc_log_likelihood(st,gt,mut,pit), False, st, Tt, pit, gt
-        
-#        sys.stderr.write("Coinfection detected!\n")
         return trace

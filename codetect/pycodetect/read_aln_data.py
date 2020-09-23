@@ -44,11 +44,14 @@ class ReadAlnData():
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
 
-    def filter(self,n):
+    def filter(self,n, mode="window"):
         """ Mask low-variance positions. """
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
-        self.VALID_INDICES = self.get_indices_max_window(n=n)
+        if mode == "window":
+            self.VALID_INDICES = self.get_indices_max_window(n=n)
+        elif mode == "rank":
+            self.VALID_INDICES = self.get_indices_max(n=n)            
         self.test_v_array() 
 
     def pos2reads(self,i):
@@ -118,11 +121,26 @@ class ReadAlnData():
                 mat[ri] /= sum(mat[ri])
         return Cmat, mat
 
+    def get_indices_max(self, n=100, mindepth=30):
+        """ Mask uninteresting positions of the matrix if not in top n. """
+        max_indices = []
+        scores = {}
+        for ri in range(0, len(self.M)):
+            row = self.M[ri]
+            if sum([len(k) for k in self.V_INDEX[ri]]) > mindepth:
+                scores[ri] = sorted(row)[-2]
+        sort = sorted([(i,q) for i,q in scores.items()],key=lambda x:x[1])
+        wmaxs = [(i,q) for i,q in sort[-n:]]
+        max_indices = [i for i,q in wmaxs]
+        for mi in max_indices:
+            assert sum([len(k) for k in self.V_INDEX[mi]]) > mindepth
+        return np.array(max_indices)
+
     def get_indices_max_window(self, n=100, windowsize=200, mindepth=20):
         """ Mask uninteresting positions of the matrix if not in top n  """
         n_windows = int(len(self.V_INDEX)/windowsize)
-        n_per_window = int(n/n_windows)
-        assert n_per_window > 1
+        n_per_window = max(int(n/n_windows),2)
+        assert n_per_window > 1, ("n:%d,n_windows:%d,n_per_window:%d,len(vindex):%d,windowsize:%d" % (n,n_windows,n_per_window,len(self.V_INDEX),windowsize))
         max_indices = []
         for winl in range(0,len(self.V_INDEX)-windowsize,windowsize):
             scores = {}
@@ -133,7 +151,7 @@ class ReadAlnData():
                     scores[ri] = sorted(row)[-2]
             sort = sorted([(i,q) for i,q in scores.items()],key=lambda x:x[1])
             wmaxs = [(i,q) for i,q in sort[-n_per_window:]]
-            print(wmaxs)
+#            print(wmaxs)
             wmaxinds = [i for i,q in wmaxs]
             max_indices += wmaxinds
         return np.array(max_indices)

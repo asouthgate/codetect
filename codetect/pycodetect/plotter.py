@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pycodetect.utils import c2i
+from pycodetect.utils import c2i, ham_nogaps
 
 def plot_m_mat_vs_seqs(rd,major,minor):
     major_arr = [[0,0,0,0] for i in range(len(major))]
@@ -10,6 +10,30 @@ def plot_m_mat_vs_seqs(rd,major,minor):
     for i in range(len(rd.M)):
         if major_arr[i] != minor_arr[i]:
             print(i, rd.M[i], major_arr[i], minor_arr[i])    
+
+def plot_mask(rad,debug_major,debug_minor):
+    # Plot basic array
+    y = []
+    for row in rad.M:
+        y.append(sorted(row)[-2])
+    xarr = [j for j in range(len(y))]
+    plt.plot(xarr, y, color='blue',alpha=0.3)
+    # Plot valid inds
+    v = [y[vi] for vi in rad.VALID_INDICES]
+    plt.scatter(x=rad.VALID_INDICES,y=v,c="grey")
+    # Plot anany false negatives and false positives
+    fp = []
+    fn = []
+    for j in range(len(debug_major)):
+        if debug_major[j] != debug_minor[j] and "N" not in [debug_major[j], debug_minor[j]]:
+            if j in rad.VALID_INDICES:
+                fp.append(j)
+            else:
+                fn.append(j)
+    plt.scatter(x=fp, y=[y[fpi] for fpi in fp], c="green")
+    plt.scatter(x=fn, y=[y[fni] for fni in fn], c="red")
+    plt.show()
+    
 
 def plot_genome(rd,T,st,minor):
     """
@@ -21,6 +45,7 @@ def plot_genome(rd,T,st,minor):
         T: membership probability array per read
         st: estimated sequence for alternative cluster
     """
+    # First calculate actual coverage
     cov0 = np.zeros(len(rd.get_consensus()))
     cov1 = np.zeros(len(rd.get_consensus()))
     for Xi in rd.X:
@@ -30,9 +55,9 @@ def plot_genome(rd,T,st,minor):
         else:
             for p,b in Xi.map.items():
                 cov1[p] += 1
-    rd.COV = cov0+cov1
-    estcov0 = np.zeros(len(rd.get_consensus()))
-    estcov1 = np.zeros(len(rd.get_consensus()))
+    rd.COV = cov0 + cov1
+
+    # Calculate indicators for mismatches etc.
     hamarr = np.zeros(len(rd.get_consensus()))
     hamarr2 = np.zeros(len(rd.get_consensus()))
     for i,hi in enumerate(rd.get_consensus()):
@@ -41,17 +66,22 @@ def plot_genome(rd,T,st,minor):
         elif st[i] == minor[i] and st[i] != rd.get_consensus()[i]:
             hamarr2[i] = len(rd.V_INDEX[i][st[i]])
 
+    # Next calculate estimated coverage
+    estcov0 = np.zeros(len(rd.get_consensus()))
+    estcov1 = np.zeros(len(rd.get_consensus()))
     for i,Xi in enumerate(rd.X):
         Ti = T[i]
         for pos,base in Xi.map.items():
             estcov0[pos] += Ti[0]
             estcov1[pos] += Ti[1]
-    plt.plot(hamarr, color='red', alpha=0.5)
-    plt.plot(hamarr2, color='green', alpha=0.5)
-    plt.plot(cov0,color='blue')
-    plt.plot(cov1,color='orange')
-    plt.plot(estcov0,color='purple')
-    plt.plot(estcov1,color='pink')
+    MAX_WIDTH=len(cov0)
+    plt.plot(hamarr[:MAX_WIDTH], color='red', alpha=0.5, label="Negatives")
+    plt.plot(hamarr2[:MAX_WIDTH], color='green', alpha=0.5, label="Positives")
+    plt.plot(cov0[:MAX_WIDTH],color='blue', label="Cov0")
+    plt.plot(cov1[:MAX_WIDTH],color='orange', label="Cov1")
+    plt.plot(estcov0[:MAX_WIDTH],color='purple', label="EstCov0")
+    plt.plot(estcov1[:MAX_WIDTH],color='pink', label="EstCov1")
+    plt.legend()
     plt.show()
 
 def debug_plot(rd,emObj):
