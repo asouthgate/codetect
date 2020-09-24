@@ -359,7 +359,7 @@ class EM():
         trace = []
         t = 0
         Lt = self.calc_log_likelihood(st,gt,mut,pit)
-        changed_inds = []
+        changed_inds = None
         old_st = st
         while True:
             

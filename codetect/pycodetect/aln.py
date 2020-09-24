@@ -188,8 +188,7 @@ class ReadAln():
 #                        sumo += np.log(1-mu)
                         self.nm_minor -= 1
                     else:
-                        assert c == prevst[bp]
-                        # previously it did match, now it does not
+                        # previously it did match, now it does not, but that does not mean the previous matched
 #                        sumo -= np.log(1-mu)
 #                        sumo += np.log(mu)
                         self.nm_minor += 1
