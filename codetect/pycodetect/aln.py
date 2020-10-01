@@ -1,6 +1,4 @@
-import numpy as np
-from pycodetect.utils import rev_comp
-import sys
+from pycodetect.utils import i2c
 
 class ReadAln():
     """Read alignment class.
@@ -21,22 +19,22 @@ class ReadAln():
     def __repr__(self):
         s = ""
         prevpos = 0
-        for pos, base in self.get_aln():
+        for pos, base in self.get_aln_tuples():
             diff = pos-prevpos
             if diff > 1:
                 s += "-"*(diff-1)
-            s += self.i2c(base)
+            s += i2c(base)
             prevpos = pos
-        return "ReadAln@pos=%d@count=%d@str=%s" % (self.get_aln()[0][0],self.count,s)
+        return "ReadAln@pos=%d@count=%d@str=%s" % (self.get_aln_tuples()[0][0],self.count,s)
 
     def get_aln_segments(self):
         s = ""
         prevpos = 0
-        for pos, base in self.get_aln():
+        for pos, base in self.get_aln_tuples():
             diff = pos-prevpos
             if diff > 1:
                 s += "X"
-            s += self.i2c(base)
+            s += i2c(base)
             prevpos = pos
         segs = [l for l in s.split("X") if l != ""]
         return segs
@@ -45,10 +43,10 @@ class ReadAln():
         return len(self.map)
 
     def get_string(self):
-        return "".join([self.i2c(b) for p,b in self.get_aln()])
+        return "".join([i2c(b) for p,b in self.get_aln_tuples()])
 
     def get_ints(self):
-        return [b for p,b in self.get_aln()]
+        return [b for p,b in self.get_aln_tuples()]
 
     def get_fq_entry_single(self):
         firstseq = self.get_aln_segments()[0]
@@ -79,7 +77,6 @@ class ReadAln():
             self.pos = None
             return False
 
-        self.nm_major = None
         return True
 
     def append_mapped_base(self, pos, c):
