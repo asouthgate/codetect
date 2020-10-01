@@ -3,6 +3,9 @@ import math
 from pycodetect.utils import *
 from pycodetect.log import logger
 
+#TODO: rename to likelihoodCalculator; cache is one component
+#TODO: move mixture model to 
+
 # TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; could make them be unknowns
 
 class MixtureModel():
@@ -35,6 +38,8 @@ class MixtureModel():
         currL = self.llc.L
         assert self.cal_loglikelihood(cache=False) == currL
     def cal_loglikelihood(self,ds,newis=None,newbs=None,newpi=None,newg0=None,newg1=None,cache=True):
+        # TODO: responsibility should be given to the likelihood calculator! The container should not be keeping track of whether its child is valid; it should, as a finite state machine.
+        assert False "to fix"
         """ Calculate log likelihood. 
 
         Interface to likelihood computation machinery. Takes a number of optional arguments,
@@ -126,6 +131,7 @@ class NmCache():
             assert nmarr[1,i] >= 0
         self.nmarr = nmarr
     def update(self,ci,ri,inc):
+        # TODO: shouldn't be told which increases or not? Should be responsible for calculating the changes?
         """ Update the number of mismatches between reads and a string.
 
         Args:
@@ -171,7 +177,7 @@ class LogLikelihoodCalculator():
         """
         return log1mg*(read.get_length()-self.nmcache[ci,ri]) + logg*(self.nmcache[ci,ri])
     def cal_pi_loglikelihood(self, rd, logpi, log1mpi):
-        """ Calculate the full log likelihood of all reads.
+        """ Calculate the full log likelihood of all reads with only pi changing.
 
         Args:
             rd: ReadData object containing read data.
@@ -199,6 +205,7 @@ class LogLikelihoodCalculator():
         assert self.L != None
         return self.L
     def update_loglikelihood(self,rd,newst,newis,newbs,oldbs,logg1,log1mg1,logpi,log1mpi):
+        # TODO: separate out somehow.
         """ Update the log likelihood given a new base.
 
         Args:

@@ -57,6 +57,7 @@ class ReadAln():
         return [b for p,b in self.get_aln()]
 
     def get_fq_entry_pair(self):
+        raise NotImplementedError
         firstseq, secondseq = self.get_aln_segments()                
         first = "@"+str(self.name)+"/1\n"+firstseq+"\n+\n"+"I"*len(firstseq)+"\n"
         second = "@"+str(self.name)+"/2\n"+rev_comp(secondseq)+"\n+\n"+"I"*len(secondseq)+"\n"
@@ -68,6 +69,7 @@ class ReadAln():
         return first
 
     def cal_ham(self,S): 
+        assert False, "Function depreciated; to be moved."
         # DEPRECIATED, SOMEHOW
         h = 0
         for p,b in self.get_aln():
@@ -76,6 +78,7 @@ class ReadAln():
         return h
 
     def get_aln(self):
+        assert False, "Function to be renamed"
         if self.aln != None:
             return self.aln
         else:
@@ -83,18 +86,23 @@ class ReadAln():
             return aln
  
     def i2c(self,i):
+        # TODO: replace with util
+        assert False, "Duplication; should be common util"
         return list("ACGT-")[i]
 
     def c2i(self,c):
+        # TODO: replace with util
+        assert False, "Duplication; should be common util"
         return {"A":0, "C":1, "G":2, "T":3}[c]
 
     def del_inds(self, delinds):
+        # TODO: delete totally
         """ Remove all bases mapping to positions in inds, and shift indices accordingly
             
         Args:
             inds: indices of deleted bases
         """
-        assert False, "we don't delete indices currently"
+        assert False, "Depreciated. we don't delete indices currently"
         for di in delinds:
             if di in self.map:
                 del self.map[di]
@@ -117,6 +125,8 @@ class ReadAln():
             self.map[pos] = c
 
     def calc_nm_major(self, consensus):
+        assert False, "depreciated"
+        # TODO: MOVE TO A CALCULATOR CACHE
         # TODO: THIS IS SLOW. SHOULD BE CACHED 
         """ Calculate the number of mismatches to the reference. """
         if self.nm_major != None:
@@ -129,6 +139,8 @@ class ReadAln():
         return self.nm_major
 
     def calc_nm_minor(self, minorcon):
+        assert False, "depreciated"
+        # TODO: MOVE TO A CALCULATOR CACHE
         # TODO: THIS IS SLOW. SHOULD BE CACHED 
         """ Calculate the number of mismatches to the reference. """
         if self.nm_minor != None:
@@ -141,6 +153,8 @@ class ReadAln():
         return self.nm_minor
             
     def logPmajor(self, gamma):
+        assert False, "depreciated"
+        # TODO: MOVE TO A CALCULATOR
         """ Calculate Pr aln given that it belongs to the major group.
     
         Args:
@@ -152,6 +166,8 @@ class ReadAln():
         return logp
 
     def Pminor(self, vt):
+        assert False, "depreciated"
+        # TODO: MOVE TO A CALCULATOR
         """ Calculate Pr aln given that it belongs to minor group.
 
         Args:
@@ -167,6 +183,8 @@ class ReadAln():
         return res
 
     def logPminor2(self, mu, st, prevst=None, changed_inds=None):
+        assert False, "depreciated"
+        # TODO: MOVE TO A CALCULATOR
         """ Calculate Pr aln given that it belongs to minor group.
 
         Args:
