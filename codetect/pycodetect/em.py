@@ -20,14 +20,9 @@ class EM():
     """
     def __init__(self, rd, min_d):
         self.rd = rd
-        self.X = rd.X
-        self.n_reads = sum([Xi.count for Xi in self.X])
-        self.M = rd.M
-        self.V_index = rd.V_INDEX
+        self.n_reads = sum([Xi.count for Xi in self.rd.X])
         self.min_cov = 0
         self.consensus = rd.get_consensus()
-        self.min_threshold = 0.001
-        self.min_freq = 0.03
         self.min_d = min_d
 
     def calc_log_likelihood(self, st, g0, g1, pi):
@@ -43,7 +38,7 @@ class EM():
         # We now seek the log likelihood 
         # = log(P(X_i | Zi=1,theta)pi + P(Xi | Zi=2,theta)(1-pi))
         sumo = 0
-        for i,Xi in enumerate(self.X):
+        for i,Xi in enumerate(self.rd.X):
             # TODO: replace read calculating its own LL with cache?
             a = Xi.logPmajor(g0)
             b = Xi.logPminor2(g1, st)
@@ -54,9 +49,9 @@ class EM():
 
     # TODO: replace with logging
     def print_debug_info(self, Tt, st):
-        inds = sorted([i for i in range(len(self.X))], key = lambda i : self.X[i].pos)
+        inds = sorted([i for i in range(len(self.rd.X))], key = lambda i : self.X[i].pos)
         for i in inds:
-            print(self.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
+            print(self.rd.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
 
     def calTi_pair2(self, Xi, pi, g0, g1, st, prev_st, changed_inds):
         # TODO: depreciate; import calculator function
@@ -116,7 +111,7 @@ class EM():
         res = []
         # Also calculate the log likelihood while we're at it
         Lt = 0
-        for Xi in self.X:
+        for Xi in self.rd.X:
             pairT, logL = self.calTi_pair2(Xi,pi,g1,g2,st,prev_st,changed_inds)
             res.append(pairT)
             Lt += logL
@@ -126,8 +121,8 @@ class EM():
     def recalc_gk(self, T, S, k):
         # TODO: replace cal_ham with a call to a cache
         """ Recalculate gamma for the kth cluster. """
-        numo = sum([T[i,k] * Xi.count * Xi.cal_ham(S) for i, Xi in enumerate(self.X)])
-        deno = sum([T[i,k] * Xi.count * len(Xi.get_aln()) for i, Xi in enumerate(self.X)])
+        numo = sum([T[i,k] * Xi.count * Xi.cal_ham(S) for i, Xi in enumerate(self.rd.X)])
+        deno = sum([T[i,k] * Xi.count * len(Xi.get_aln()) for i, Xi in enumerate(self.rd.X)])
         assert deno > 0
         newg = numo/deno
         assert 0 <= newg <= 1, newg
@@ -181,9 +176,9 @@ class EM():
         for k in self.ds.VALID_INDICES:
             v = np.zeros(4)
             totalTk = 0
-            for j,rl in enumerate(self.V_index[k]):
+            for j,rl in enumerate(self.rd.V_INDEX[k]):
                 for ri in rl:
-                    Xri = self.X[ri]
+                    Xri = self.rd.X[ri]
                     assert k in Xri.map, (k,Xri.map)
                     assert j == Xri.map[k]
                     baseweights[k,j] += T[ri,1]
@@ -203,7 +198,7 @@ class EM():
         ststar = [c for c in self.consensus]
         for bi in self.ds.VALID_INDICES:
             bw = baseweights[bi]
-            maxi = max([j for j in range(4) if len(self.V_index[bi][j]) > self.min_cov], key=lambda x:bw[x])
+            maxi = max([j for j in range(4) if len(self.rd.V_INDEX[bi][j]) > self.min_cov], key=lambda x:bw[x])
             if sum(bw) > 0:
                 ststar[bi] = maxi
             else:
@@ -247,7 +242,7 @@ class EM():
         return maxind, rh, rseq
  
     def recalc_pi(self,T):
-        return sum([T[i,0] * self.X[i].count for i in range(len(T))]) / self.n_reads
+        return sum([T[i,0] * self.rd.X[i].count for i in range(len(T))]) / self.n_reads
 
     def init_st_random(self, M):
         st = [c for c in self.consensus]
@@ -263,12 +258,12 @@ class EM():
             vt = M[vi]
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             sb = stups[-2]
-            if vt[sb] > 0.0 and len(self.V_index[vi][sb]) > self.min_cov:
+            if vt[sb] > 0.0 and len(self.rd.V_INDEX[vi][sb]) > self.min_cov:
                 second_best.append((vt[sb],vi,sb))
         second_best = sorted(second_best,key=lambda x:x[0])
         c = 0
-        for val,vi,sb in second_best[::-1]:
-            if c > self.min_d and val < self.min_freq:
+        for val, vi, sb in second_best[::-1]:
+            if c > self.min_d:
                 break
             c += 1
             st[vi] = sb
@@ -315,10 +310,10 @@ class EM():
         # Initialization of st
         if fixed_st is None:
             if random_init:
-                st = self.init_st_random(self.M)
+                st = self.init_st_random(self.rd.M)
             else:
                 if ref_panel is None:
-                    st = self.init_st(self.M)
+                    st = self.init_st(self.rd.M)
                 else:
                     curr_ri, refht, st = ref_panel.get_random_ref()
         else:
@@ -326,18 +321,18 @@ class EM():
 
         # Some safety checks
         assert len(st) == len(self.consensus), (len(st), len(self.consensus))
-        for row in self.M:
+        for row in self.rd.M:
             for v in row:
                 assert not np.isnan(v)
-        assert len(self.X) > 0
-        for i, Xi in enumerate(self.X):
+        assert len(self.rd.X) > 0
+        for i, Xi in enumerate(self.rd.X):
             for pos, bk in Xi.get_aln():
-                assert i in self.V_index[pos][bk]
-                assert self.M[pos, bk] > 0
-        for m in self.M:
+                assert i in self.rd.V_INDEX[pos][bk]
+                assert self.rd.M[pos, bk] > 0
+        for m in self.rd.M:
             if sum([q for q in m]) > 0:
                 assert sum(m) > 0.98, m
-        assert len(self.V_index) == len(self.M)
+        assert len(self.rd.V_INDEX) == len(self.rd.M)
         assert 0 <= gt <= 1,gt
         assert ham(st, self.consensus) >= self.min_d, ham(st, self.consensus)
 
