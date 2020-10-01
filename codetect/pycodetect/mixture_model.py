@@ -3,43 +3,41 @@ import math
 from pycodetect.utils import *
 from pycodetect.log import logger
 
-#TODO: rename to likelihoodCalculator; cache is one component
-#TODO: move mixture model to 
-
-# TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; could make them be unknowns
+# TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; throw error if you find them
 
 class MixtureModel():
     def __init__(self, rd, gamma0, gamma1, consensus, pi, initstr):
+        # FORMULATE AS A FINITE STATE MACHINE
         self.set_g1(gamma1)
         self.set_g0(gamma0)
         self.set_pi(pi)
         self.st = [c for c in initstr]
-        self.llc = LogLikelihoodCalculator(rd,self.st)    
+        self.llc = LogLikelihoodCalculator(rd, self.st)    
         self.consensus = tuple([c for c in consensus])
         self.initialized = False
         self.cal_loglikelihood(rd)
+
     def set_g1(self,newg1):
         self.g1 = newg1
         self.logg1 = math.log(self.g1)
         self.log1mg1 = math.log(1-self.g1)
         self.initialized = False
+
     def set_g0(self,newg0):
         self.g0 = newg0
         self.logg0 = math.log(self.g0)
         self.log1mg0 = math.log(1-self.g0)
         self.initialized = False
+
     def set_pi(self,newpi):
         self.pi = newpi
         self.logpi = math.log(self.pi)
         self.log1mpi = math.log(1-self.pi)
         self.initialized = False
-    def test_state(self,rd):
-        self.llc.test_caches(rd,rd.get_consensus(), self.st) 
-        currL = self.llc.L
-        assert self.cal_loglikelihood(cache=False) == currL
-    def cal_loglikelihood(self,ds,newis=None,newbs=None,newpi=None,newg0=None,newg1=None,cache=True):
-        # TODO: responsibility should be given to the likelihood calculator! The container should not be keeping track of whether its child is valid; it should, as a finite state machine.
-        assert False "to fix"
+
+    def cal_loglikelihood(self, ds, newis=None, newbs=None, newpi=None,
+                                    newg0=None, newg1=None, cache=True):
+        # TODO: responsibility should be given to the likelihood calculator?
         """ Calculate log likelihood. 
 
         Interface to likelihood computation machinery. Takes a number of optional arguments,
@@ -61,13 +59,13 @@ class MixtureModel():
         if newis != None:
             for j,newi in enumerate(newis):
                 newst[newi] = newbs[j]
+
+        # TODO: implement logger warnings
         #logger.warning("Updating loglikelihood. Was: %s" % self.llc.L)
         #logger.warning("consensus  : %s" % str(self.consensus))
         #logger.warning("prev string: %s" % str(self.st))
         #logger.warning("new string: %s" % str(newst))
         #logger.warning("new parameters: %s %s %s %s %s" % (i, newb, newpi, newg0, newg1))
-        # TODO: make test optional
-#        self.llc.nmcache.test_nmarr(ds,ds.get_consensus(),self.st)
 
         #//*** Cases ***//
         # Case 1: no caching, full recalculation required
@@ -119,8 +117,10 @@ class NmCache():
     def __init__(self, ds, initstr):
         self.nmarr = np.zeros((2,len(ds.X)))
         self.init_nmarr(ds,initstr)
+
     def __getitem__(self,args):
         return self.nmarr[args[0],args[1]]
+
     def init_nmarr(self,ds,altstr):
         """ Calculate the number of mismatches between reads and a string. """
         nmarr = np.zeros((2,len(ds.X)))
@@ -130,8 +130,8 @@ class NmCache():
             assert nmarr[0,i] >= 0
             assert nmarr[1,i] >= 0
         self.nmarr = nmarr
+
     def update(self,ci,ri,inc):
-        # TODO: shouldn't be told which increases or not? Should be responsible for calculating the changes?
         """ Update the number of mismatches between reads and a string.
 
         Args:
@@ -140,19 +140,6 @@ class NmCache():
          """
         assert inc in [-1,1]
         self.nmarr[ci,ri] += inc
-    def test_read_nm(self,ri, read,consensus,st):
-        h1 = read.cal_ham(consensus)
-        h2 = read.cal_ham(st)
-        assert self.nmarr[0,ri] == h1, ((self.nmarr[0,ri], h1), "Bad nmarr value for read %d." % ri)
-        assert self.nmarr[1,ri] == h2, ((self.nmarr[1,ri], h2), "Bad nmarr value for read %d." % ri)
-    def test_nmarr(self,rd,consensus,st):
-        """ Test that the number of mismatches in nmarr is correct. 
-
-        Args:
-            rd: ReadData object
-        """
-        for ri,ra in enumerate(rd.X):
-            self.test_read_nm(ri, ra,consensus,st)
 
 class LogLikelihoodCalculator():
     def __init__(self,rd,initstr):
@@ -160,11 +147,7 @@ class LogLikelihoodCalculator():
         self.margL = np.zeros(len(rd.X))    
         self.L = None
         self.nmcache = NmCache(rd,initstr)
-    def test_caches(self,rd,consensus,st):
-        nmcache.test_nmarr(rd,consensus,st)
-        for ri, read in enumerate(rd.X):
-            assert self.condL[0,ri] == self.cal_read_loglikelihood(ri,read,0, logg0, log1mg0), "Bad conditional L value."
-            assert self.condL[1,ri] == self.cal_read_loglikelihood(ri,read,1, logg1, log1mg1), "Bad conditional L value."
+
     def cal_read_loglikelihood(self, ri, read, ci, logg, log1mg):
         """ Calculate the loglikelihood of a read given a cluster.
 
@@ -176,6 +159,7 @@ class LogLikelihoodCalculator():
             logq: log(1-g), where g is the gamma parameter for ci
         """
         return log1mg*(read.get_length()-self.nmcache[ci,ri]) + logg*(self.nmcache[ci,ri])
+
     def cal_pi_loglikelihood(self, rd, logpi, log1mpi):
         """ Calculate the full log likelihood of all reads with only pi changing.
 
@@ -189,6 +173,7 @@ class LogLikelihoodCalculator():
         self.L = sum(self.margL)
         assert self.L != None
         return self.L
+
     def cal_full_loglikelihood(self, rd, logg0, log1mg0, logg1, log1mg1, logpi, log1mpi):
         """ Calculate the full log likelihood of all reads.
 
@@ -204,6 +189,7 @@ class LogLikelihoodCalculator():
         self.L = sum(self.margL)
         assert self.L != None
         return self.L
+
     def update_loglikelihood(self,rd,newst,newis,newbs,oldbs,logg1,log1mg1,logpi,log1mpi):
         # TODO: separate out somehow.
         """ Update the log likelihood given a new base.
@@ -227,7 +213,6 @@ class LogLikelihoodCalculator():
                 #logger.warning("\tnew  str: %s" % str(newst))
                 if read.map[newi] == newb:
                     #logger.warning("\tnew base match; decrease mismatches, increase likelihood")
-                    # TODO: compute log gamma once per round; dont need to log loads of times. slow.
                     self.condL[1,ri] -= logg1
                     self.condL[1,ri] += log1mg1
                     self.nmcache.update(1,ri,-1)
@@ -238,14 +223,8 @@ class LogLikelihoodCalculator():
                     self.condL[1,ri] += logg1
                     self.nmcache.update(1,ri,1)
                     self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
-                # TODO: make this slow check optional
                 #logger.warning("\tnew condlikelihood %f" % (self.condL[1,ri] * read.count))
                 #logger.warning("\tnew marglikelihood %f" % self.margL[ri])
-    #            self.nmcache.test_read_nm(ri,read,rd.get_consensus(),newst)
-    #            slowcheck = self.cal_read_loglikelihood(ri,read,1,logg1, log1mg1) * read.count
-    #            assert approx(self.condL[1,ri]*read.count,slowcheck), "Likelihood computed incorrectly; %f should be %f." % (self.condL[1,ri] * read.count, slowcheck)
-    #            assert self.condL[1,ri] <= 0, "Bad value %f, read likelihood should not exceed 0" % self.condL[1,ri]
-    #            assert self.margL[ri] <= 0, "Bad value %f, read likelihood should not exceed 0" % self.margL[ri]
         self.L = sum(self.margL)
         return self.L
 
