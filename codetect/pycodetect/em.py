@@ -20,7 +20,6 @@ class EM():
     """
     def __init__(self, rd, min_d):
         self.rd = rd
-        self.n_reads = sum([Xi.count for Xi in self.rd.X])
         self.min_cov = 0
         self.consensus = rd.get_consensus()
         self.min_d = min_d
@@ -242,7 +241,7 @@ class EM():
         return maxind, rh, rseq
  
     def recalc_pi(self,T):
-        return sum([T[i,0] * self.rd.X[i].count for i in range(len(T))]) / self.n_reads
+        return sum([T[i,0] * self.rd.X[i].count for i in range(len(T))]) / self.rd.n_reads
 
     def init_st_random(self, M):
         st = [c for c in self.consensus]

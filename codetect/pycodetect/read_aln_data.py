@@ -44,6 +44,7 @@ class ReadAlnData():
         # Calculate the number of mismatches
         [Xi.calc_nm_major(self._CONSENSUS) for Xi in self.X]
         self.test_v_array()
+        self.n_reads = sum([Xi.count for Xi in self.rd.X])
 
     def filter(self,n, mode="window"):
         """ Mask low-variance positions. """
