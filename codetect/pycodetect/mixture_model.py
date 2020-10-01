@@ -1,13 +1,36 @@
 import numpy as np
 import math      
-from pycodetect.utils import *
+from pycodetect.utils import logsumexp
 from pycodetect.log import logger
 
 # TODO: ambiguous bases or gaps (5) are currently just counted as mismatches; throw error if you find them
+# TODO: there is possibly too much coupling between MixtureModel and LogLikelihoodCalculator
+#       which one is responsible for figuring out when to perform caching? 
+#       at the moment, MixtureModel is responsible for knowing when to cache, and calling the correct
+#       functions of the likelihood cache. The likelihood cache in turn stores the marginal likelihoods
+#       but should it? If an EM algorithm uses these, then it will need to retrieve the marginals.
+#       MM has to know how likelihoods are cached, fundamentally, which makes both MM and LLC responsible
+#       for managing the likelihood cache.
+#       Solution: a) make MM only store the parameters; give the LLC all of the responsibility for caching 
+#              OR b) merge LLC into MM. 
+#       Atmo, to use LLC you must know HOW it caches; LLC is not shy enough.
 
 class MixtureModel():
+    """ Mixture model responsible for managing model state variables 
+        during estimation, including gamma, pi, strings, and likelihood.
+
+        MixtureModel is designed as a FSM to anticipate change, and optimize
+        recalculation of likelihoods via a cache.
+    
+    Args:
+        rd: read data
+        gamma0: cluster 0 error
+        gamma1: cluster 1 error 
+        consensus: cluster 0 string
+        pi: cluster 0 proportion
+        inistr: cluster 1 string (assumed to change)
+    """
     def __init__(self, rd, gamma0, gamma1, consensus, pi, initstr):
-        # FORMULATE AS A FINITE STATE MACHINE
         self.set_g1(gamma1)
         self.set_g0(gamma0)
         self.set_pi(pi)
@@ -94,7 +117,8 @@ class MixtureModel():
             # Case 3.c: new base at position i has been proposed; fast recalculation performed
                 else:
                     # Case 3.c.1: new base at position i has been proposed but it is the same as the old one; don't recompute
-                    ll = self.llc.update_loglikelihood(ds,newst,newis,newbs,oldbs,self.logg1, self.log1mg1, self.logpi, self.log1mpi)
+                    ll = self.llc.update_loglikelihood(ds, newis, newbs, oldbs, self.logg1, 
+                                                       self.log1mg1, self.logpi, self.log1mpi)
                     for j,newi in enumerate(newis):
                         self.st[newi] = newbs[j]
                     return ll
@@ -104,7 +128,7 @@ class MixtureModel():
         # Case 4.a: only pi changed; partial recalculation required
         if newg0 == newg1 == None and newpi != None:
 #            assert self.initialized, "Attempting to calculate likelihood without fully calculating read likelihoods first!"
-            res = self.llc.cal_pi_loglikelihood(ds, self.logpi, self.log1mpi)
+            res = self.llc.cal_loglikelihood_newpi(ds, self.logpi, self.log1mpi)
         else:
             assert not self.initialized, "State is initialized but a full recomputation is requested! Bug."
         # Case 4.b: pi, g0, g1 changes; full recalculation required
@@ -114,12 +138,19 @@ class MixtureModel():
         return res
 
 class NmCache():
-    def __init__(self, ds, initstr):
-        self.nmarr = np.zeros((2,len(ds.X)))
-        self.init_nmarr(ds,initstr)
+    """ Cache for storing and optimized updating the number of mismatches
+        between reads and dynamic reference.
 
-    def __getitem__(self,args):
-        return self.nmarr[args[0],args[1]]
+        Args:
+            read_aln_data: ReadAlnData object
+            inistr: initial s1    
+    """
+    def __init__(self, read_aln_data, initstr):
+        self.nmarr = np.zeros((2, len(read_aln_data.X)))
+        self.init_nmarr(read_aln_data,initstr)
+
+    def __getitem__(self, args):
+        return self.nmarr[args[0], args[1]]
 
     def init_nmarr(self,ds,altstr):
         """ Calculate the number of mismatches between reads and a string. """
@@ -142,11 +173,17 @@ class NmCache():
         self.nmarr[ci,ri] += inc
 
 class LogLikelihoodCalculator():
-    def __init__(self,rd,initstr):
-        self.condL = np.zeros((2,len(rd.X)))
-        self.margL = np.zeros(len(rd.X))    
+    """ Optimized calculator of log likelihood using caches. 
+
+    Args:
+        read_aln_data: ReadAlnData object with reads in
+        initstr: first string of integers
+    """
+    def __init__(self, read_aln_data, initstr):
+        self.condL = np.zeros((2, len(read_aln_data.X)))
+        self.margL = np.zeros(len(read_aln_data.X))    
         self.L = None
-        self.nmcache = NmCache(rd,initstr)
+        self.nmcache = NmCache(rd, initstr)
 
     def cal_read_loglikelihood(self, ri, read, ci, logg, log1mg):
         """ Calculate the loglikelihood of a read given a cluster.
@@ -158,30 +195,32 @@ class LogLikelihoodCalculator():
             logg: log(g), where g is the gamma parameter for ci
             logq: log(1-g), where g is the gamma parameter for ci
         """
-        return log1mg*(read.get_length()-self.nmcache[ci,ri]) + logg*(self.nmcache[ci,ri])
+        return ( log1mg * (read.get_length()-self.nmcache[ci,ri]) ) + ( logg * (self.nmcache[ci,ri]) )
 
-    def cal_pi_loglikelihood(self, rd, logpi, log1mpi):
+    def cal_loglikelihood_newpi(self, read_aln_data, logpi, log1mpi):
         """ Calculate the full log likelihood of all reads with only pi changing.
 
         Args:
-            rd: ReadData object containing read data.
+            read_aln_data: ReadAlnData object containing read data.
+            logpi: log(pi), where pi is the mixing parameter.
+            log1mpi: log(1-pi), where pi is the mixing parameter.
         """
         # TODO: if only pi changes, read condL likelihoods do not need to be recomputed
-        for ri,read in enumerate(rd.X):
+        for ri,  read in enumerate(read_aln_data.X):
             self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
             assert self.margL[ri] < 0.0, "Full likelihood calculation resulted in improper likelihood (>0):%f" % self.margL[ri]
         self.L = sum(self.margL)
         assert self.L != None
         return self.L
 
-    def cal_full_loglikelihood(self, rd, logg0, log1mg0, logg1, log1mg1, logpi, log1mpi):
+    def cal_full_loglikelihood(self, read_aln_data, logg0, log1mg0, logg1, log1mg1, logpi, log1mpi):
         """ Calculate the full log likelihood of all reads.
 
         Args:
-            rd: ReadData object containing read data.
+            read_aln_data: ReadAlnData object containing read data.
         """
         # TODO: if only pi changes, read condL likelihoods do not need to be recomputed
-        for ri,read in enumerate(rd.X):
+        for ri, read in enumerate(read_aln_data.X):
             self.condL[0,ri] = self.cal_read_loglikelihood(ri,read,0, logg0, log1mg0)
             self.condL[1,ri] = self.cal_read_loglikelihood(ri,read,1, logg1, log1mg1)
             self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
@@ -190,13 +229,12 @@ class LogLikelihoodCalculator():
         assert self.L != None
         return self.L
 
-    def update_loglikelihood(self,rd,newst,newis,newbs,oldbs,logg1,log1mg1,logpi,log1mpi):
+    def update_loglikelihood(self, rd, newis, newbs, oldbs, logg1, log1mg1, logpi, log1mpi):
         # TODO: separate out somehow.
         """ Update the log likelihood given a new base.
 
         Args:
             rd: ReadData object.
-            newst: specified for debugging purposes
             newi: index of new base.
             newb: new base.
         """
@@ -225,6 +263,8 @@ class LogLikelihoodCalculator():
                     self.margL[ri] = logsumexp([self.condL[0,ri] + logpi, self.condL[1,ri] + log1mpi]) * read.count
                 #logger.warning("\tnew condlikelihood %f" % (self.condL[1,ri] * read.count))
                 #logger.warning("\tnew marglikelihood %f" % self.margL[ri])
+        # TODO: should not sum margl every time; should just subtract and add for the reads that have changed.
+        # O(expected coverage), instead of O(N)
         self.L = sum(self.margL)
         return self.L
 
