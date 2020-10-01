@@ -27,6 +27,14 @@ class ReadAln():
             prevpos = pos
         return "ReadAln@pos=%d@count=%d@str=%s" % (self.get_aln_tuples()[0][0],self.count,s)
 
+    def cal_ham(self, S): 
+        """ Calculate the hamming distance to S. """
+        h = 0
+        for p, b in self.get_aln():
+            if b != S[p]:
+                h += 1
+        return h
+
     def get_aln_segments(self):
         s = ""
         prevpos = 0
