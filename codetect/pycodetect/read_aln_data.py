@@ -55,7 +55,7 @@ class ReadAlnData():
         self.test_v_array() 
 
     def pos2reads(self,i):
-        return functools.reduce(lambda a,b : a+b,self.V_INDEX[i])
+        return functools.reduce(lambda a, b : a + b, self.V_INDEX[i])
 
     def get_consensus(self):
         return self._CONSENSUS
@@ -72,12 +72,19 @@ class ReadAlnData():
         return np.random.choice(self.X, N_SAMPLES, replace=False)
 
     def subsample(self, N_SAMPLES=2000):
+        self.X = self.subsample_stratified(self.X, N_SAMPLES=N_SAMPLES)
+
+    def subsample_stratified(self, X, N_SAMPLES=2000):
         """
         Subsample across the reference to correct for depth imbalance.
+        A form of stratified sampling.
+
+        Args:
+            X: list of ReadAln objects.
         """
         #TODO: check math for legitimacy
         pos_start_arr = [[] for i in range(len(self.get_consensus()))]
-        for i,Xi in enumerate(self.X):
+        for i, Xi in enumerate(X):
             pos_start_arr[Xi.pos].append(i)
         subsample = []
         while len(subsample) < N_SAMPLES:
@@ -87,7 +94,7 @@ class ReadAlnData():
                     choiceli = random.randint(0,len(l)-1)
                     choicexi = l[choiceli]
                     del l[choiceli]
-                    subsample.append(self.X[choicexi])
+                    subsample.append(X[choicexi])
         return subsample        
 
     def deduplicate(self, X):
