@@ -22,9 +22,7 @@ class ReadAlnData():
         # Build V index
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
-#        # Subsample
-#        sys.stderr.write("Subsampling across the reference\n")
-#        self.X = self.subsample()
+
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")
@@ -46,7 +44,7 @@ class ReadAlnData():
         self.test_v_array()
         self.n_reads = sum([Xi.count for Xi in self.rd.X])
 
-    def filter(self,n, mode="window"):
+    def filter(self, n, mode="window"):
         """ Mask low-variance positions. """
         # Mask low variance positions
         sys.stderr.write("Masking low variance positions\n")
@@ -157,19 +155,3 @@ class ReadAlnData():
             wmaxinds = [i for i,q in wmaxs]
             max_indices += wmaxinds
         return np.array(max_indices)
-
-    def get_indices(self,t=0.97,mindepth=20):
-        """ Mask uninteresting positions of the matrix. """
-        delinds = set()
-        for ri,row in enumerate(self.M):
-            if max(row) > t or max(row) == 0:
-                delinds.add(ri)
-            if sum([len(k) for k in self.V_INDEX[ri]]) < mindepth:
-                delinds.add(ri)
-        sys.stderr.write("Deleting %d positions\n"% len(delinds))
-        if len(delinds) == 0:
-            return [j for j in range(len(self._reference))]
-        if len(delinds) == len(self._reference):
-            raise ValueError("no sites remaining")
-        #TODO: figure out if and when it is legitimate to delete these bases from the reads entirely
-        return np.array([i for i in range(len(self._reference)) if i not in delinds])
