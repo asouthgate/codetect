@@ -11,11 +11,10 @@ required arguments:
 
 import sys
 from Bio import SeqIO
-import numpy as np
 from pycodetect.bam_importer import collect_alns
 from pycodetect.em import EM
 from pycodetect.read_aln_data import ReadAlnData
-from pycodetect.utils import str_c2i, str_i2c, ham, str_only_ACGT
+from pycodetect.utils import str_c2i, str_i2c, str_only_ACGT
 from pycodetect.plotter import plot_mask
 from pycodetect.ref_panel import RefPanel
 import argparse
@@ -30,7 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("-mind", type=int, required=True)
     parser.add_argument("-ref_msa", type=str, required=False, default=None)
     parser.add_argument("-debug_minor", type=str, required=False, default=None)
-    parser.add_argument("--filter", type=str, required=False, default="window")
+    parser.add_argument("--filter", type=str, required=False, default="winestimatew")
     args = parser.parse_args()
     alns = collect_alns(args.bam)
     ref_rec = [r for r in SeqIO.parse(args.ref, "fasta")][0]
@@ -51,26 +50,26 @@ if __name__ == "__main__":
 #[t, self.calc_log_likelihood(st,gt,mut,pit), pit, gt, mut
     if not args.debug_minor:
         if args.ref_msa is None:
-            trace = em.do2()
+            trace = em.estimate()
         else:
             rp = RefPanel(em.consensus, args.ref_msa, ref_rec.description, min_d=args.mind)
-            trace = em.do2(ref_panel=rp)
+            trace = em.estimate(ref_panel=rp)
     else:
         dbm = [str_c2i(str_only_ACGT(str(r.seq))) for r in SeqIO.parse(args.debug_minor, "fasta")][0] 
         if args.ref_msa is None:
             sys.stderr.write("Running without ref panel\n")
-            trace = em.do2(debug_minor=dbm,debug=True)
+            trace = em.estimate(debug_minor=dbm,debug=True)
         else:
             sys.stderr.write("running with ref panel\n")
             rp = RefPanel(em.consensus, args.ref_msa, ref_rec.description, min_d=args.mind)
-            trace = em.do2(ref_panel=rp,debug_minor=dbm,debug=True)
+            trace = em.estimate(ref_panel=rp,debug_minor=dbm,debug=True)
 
 #    L0 = em.calc_L0()
     sys.stderr.write("Calculating H0\n")
     L0 = em.calc_L0()
     sys.stderr.write("L0: %f\n" % L0)
-    alt_trace = em.do2(min_pi=1.0,fixed_st=trace[-1][-1])
-    nsites = len(em.ds.VALID_INDICES)
+    alt_trace = em.estimate(min_pi=1.0,fixed_st=trace[-1][-1])
+    nsites = len(em.rd.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:
         f.write("nsites\n%d" % (nsites))
     with open(args.out+".trace.csv", "w") as f:
