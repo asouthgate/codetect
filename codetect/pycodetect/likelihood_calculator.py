@@ -1,6 +1,15 @@
 import numpy as np
 from pycodetect.utils import logsumexp
 
+def cal_read_logP_simple(read, gamma, st):
+    sumo = 0
+    for pos, c in read.get_aln_tuples():
+        if c == st[pos]:
+            sumo += np.log(1-gamma)
+        else:
+            sumo += np.log(gamma)
+    return sumo
+
 class NMCache():
     """ Cache for storing and optimized updating the number of mismatches
         between reads and dynamic reference.
@@ -47,9 +56,12 @@ class LikelihoodCalculator():
         read_aln_data: ReadAlnData object
         init_st: string for first likelihood calculation
     """
-    def __init__(self, read_aln_data, init_st):
+    def __init__(self, read_aln_data, init_st, gamma):
         self.nm_cache = NMCache(read_aln_data, init_st)
-        self.llcache = np.zeros(len(read_aln_data.X))
+        self.llcache = np.zeros((2, len(read_aln_data.X)))
+        for ri, read in enumerate(read_aln_data.X):
+            self.cal_logP_read(ri, read, 0, gamma, read_aln_data.get_consensus())
+            self.cal_logP_read(ri, read, 1, gamma, init_st)
 
     def cal_logP_read(self, ri, read, ci, gamma, st, st_changed_bases=None):
         # TODO: should index of read be put inside read if they are being passed around like ids?
@@ -61,7 +73,7 @@ class LikelihoodCalculator():
             ci: cluster index.
             gamma: gamma parameter.
             st: cluster string.
-            changed_bases: (bi,b) tuples where st differs from the st of the last call.
+            changed_bases: (bi,b) tuples where st differs from the st_prev of the last call.
         """
         nothing_changed_for_read = True
         if st_changed_bases is not None:
@@ -81,17 +93,23 @@ class LikelihoodCalculator():
                         pass
         else:
             nm = 0
-            for bp,c in read.get_aln():
+            for bp, c in read.get_aln_tuples():
                 if c == st[bp]:
                     pass
                 else:
                     nm += 1
-            nothing_changed_for_reads = False
+            nothing_changed_for_read = False
             self.nm_cache.set(ci, ri, nm)
 
+        #! TODO: reconsider. Something always changes for read in EM
+        #        gamma! and if not, gamma needs to be stored too to know this
+        nothing_changed_for_read = False
         if not nothing_changed_for_read:
             matches = len(read.map) - self.nm_cache[ci, ri]
+            assert matches + self.nm_cache[ci, ri] > 0
             self.llcache[ci, ri] = ( np.log(gamma) * self.nm_cache[ci, ri] ) + ( np.log(1-gamma) * matches )
+            assert self.llcache[ci, ri] != 0
+        assert self.llcache[ci, ri] != 0
         return self.llcache[ci, ri]
 
     def calc_data_log_likelihood(self, rd, st, g0, g1, pi, consensus, st_changed_bases):
@@ -139,6 +157,9 @@ class LikelihoodCalculator():
 
         l1 = self.cal_logP_read(ri, Xi, 0, g0, consensus, [])
         l2 = self.cal_logP_read(ri, Xi, 1, g1, st, st_changed_bases)
+#        l1val = cal_read_logP_simple(Xi, g0, consensus) 
+#        assert l1val == l1, (l1val, l1)
+#        assert cal_read_logP_simple(Xi, g1, st) == l2
 
         lw1 = np.log(pi)
         lw2 = np.log(1-pi)
