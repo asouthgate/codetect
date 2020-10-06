@@ -11,19 +11,19 @@ class NMCache():
     """
     def __init__(self, read_aln_data, initstr):
         self.nmarr = np.zeros((2, len(read_aln_data.X)))
-        self.init_nmarr(read_aln_data,initstr)
+        self.init_nmarr(read_aln_data, initstr)
 
     def __getitem__(self, args):
         return self.nmarr[args[0], args[1]]
 
-    def init_nmarr(self,ds,altstr):
+    def init_nmarr(self, ds, altstr):
         """ Calculate the number of mismatches between reads and a string. """
-        nmarr = np.zeros((2,len(ds.X)))
-        for i,xi in enumerate(ds.X):
-            nmarr[0,i] = xi.cal_ham(ds.get_consensus())
-            nmarr[1,i] = xi.cal_ham(altstr)
-            assert nmarr[0,i] >= 0
-            assert nmarr[1,i] >= 0
+        nmarr = np.zeros((2, len(ds.X)))
+        for i, xi in enumerate(ds.X):
+            nmarr[0, i] = xi.cal_ham(ds.get_consensus())
+            nmarr[1, i] = xi.cal_ham(altstr)
+            assert nmarr[0, i] >= 0
+            assert nmarr[1, i] >= 0
         self.nmarr = nmarr
 
     def set(self, ci, ri, val):
@@ -86,6 +86,7 @@ class LikelihoodCalculator():
                     pass
                 else:
                     nm += 1
+            nothing_changed_for_reads = False
             self.nm_cache.set(ci, ri, nm)
 
         if not nothing_changed_for_read:
@@ -114,11 +115,12 @@ class LikelihoodCalculator():
             a = self.cal_logP_read(i, Xi, 0, g0, consensus, [])
             b = self.cal_logP_read(i, Xi, 1, g1, st, st_changed_bases)
             lw1 = np.log(pi)
-            lw2 = np.log(1-pi)
+            lw2 = np.log(1 - pi)
+            # TODO: Xi.count accessed -- breaking encapsulation for optimization. Better way?
             sumo += ( logsumexp([a + lw1, b + lw2]) * Xi.count ) 
         return sumo
 
-    def cal_P_cluster_given_read(self, ri, Xi, pi, g0, g1, st, consensus, st_changed_bases):
+    def cal_P_clusters_given_read(self, ri, Xi, pi, g0, g1, st, consensus, st_changed_bases):
         """ Calculate the ith membership conditional probability array element.
         
         Args:

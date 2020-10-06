@@ -1,10 +1,8 @@
-from io import StringIO
-import math
 import numpy as np
 import sys
-import random
 import pycodetect.plotter as plotter
-from pycodetect.utils import ham, c2i, logsumexp, ham_nogaps
+from pycodetect.utils import ham, ham_nogaps
+from pycodetect.likelihood_calculator import LikelihoodCalculator
 np.set_printoptions(threshold=sys.maxsize)
 
 # TODO: why does EM() have ReadAlnData state? It should not have that. 
@@ -23,83 +21,17 @@ class EM():
         self.min_cov = 0
         self.consensus = rd.get_consensus()
         self.min_d = min_d
+        self.llc = None
 
-    def calc_log_likelihood(self, st, g0, g1, pi):
-        """
-        Calculate the log likelihood of data given parameters.
-
-        Args:
-            st: current string.
-            g0: cluster 0 gamma.
-            g1: cluster 1 gamma.
-            pi: cluster proportion.
-        """
-        # We now seek the log likelihood 
-        # = log(P(X_i | Zi=1,theta)pi + P(Xi | Zi=2,theta)(1-pi))
-        sumo = 0
-        for i,Xi in enumerate(self.rd.X):
-            # TODO: replace read calculating its own LL with cache?
-            a = Xi.logPmajor(g0)
-            b = Xi.logPminor2(g1, st)
-            lw1 = np.log(pi)
-            lw2 = np.log(1-pi)
-            sumo += logsumexp([a + lw1, b + lw2])
-        return sumo
-
-    # TODO: replace with logging
-    def print_debug_info(self, Tt, st):
-        inds = sorted([i for i in range(len(self.rd.X))], key = lambda i : self.X[i].pos)
-        for i in inds:
-            print(self.rd.X[i].pos, self.X[i].z, Tt[i], self.X[i].cal_ham(self.consensus), self.X[i].cal_ham(st))
-
-    def calTi_pair2(self, Xi, pi, g0, g1, st, prev_st, changed_inds):
-        # TODO: depreciate; import calculator function
-        """ Calculate the ith membership conditional probability array element.
-        
-        Args:
-            Xi: ith ReadAln object
-            pi: mixture model proportion
-            g0: gamma parameter for cluster 0
-            st: cluster 1 string
-            g1: gamma parameter for cluster 1
-            prev_st: previous cluster 1 string
-            changed_inds: indices such that st[i] != prev_st[i]        
-
-        Returns:
-            tp: T array: P(Z_i = k | X_i)
-            lp: Likelihood of Xi given cluster j
-        """
-        if changed_inds is None:
-            assert st == prev_st
-        a = Xi.logPmajor(g0)
-        b = Xi.logPminor2(g1,st,prev_st,changed_inds)
-        l1 = a
-        l2 = b
-        lw1 = np.log(pi)
-        lw2 = np.log(1-pi)
-
-        exp1 = np.exp(l1 + lw1)
-        exp2 = np.exp(l2 + lw2)
-
-        c = exp1 + exp2
-        assert 0 < c <= 1.01:
-
-        t1i = exp1/c
-        t2i = exp2/c
-
-        tp = np.array([t1i,t2i])
-        assert sum(tp) > 0.999, sum(tp)
-        return tp, np.log(c)
- 
-    def recalc_T(self, pi, g1, st, g2, prev_st, changed_inds=None):
+    def recalc_T(self, pi, g0, st, g1, prev_st, st_changed_bases=None):
         """ Recalculate the T array given new parameters.
 
         Args:
             pi: mixing proportion
+            g0: gamma of cluster 0
             g1: gamma of cluster 1
-            g2: gamma of cluster 2
-            st: proposed s2
-            prev_st: previous s2
+            st: proposed st
+            prev_st: previous st
             changed_inds: indices such that st[i] != prev_st[i]        
 
         Returns:
@@ -110,8 +42,8 @@ class EM():
         res = []
         # Also calculate the log likelihood while we're at it
         Lt = 0
-        for Xi in self.rd.X:
-            pairT, logL = self.calTi_pair2(Xi,pi,g1,g2,st,prev_st,changed_inds)
+        for i, Xi in enumerate(self.rd.X):
+            pairT, logL = self.llc.cal_P_clusters_given_read(i, Xi, pi, g0, g1, st, self.consensus, st_changed_bases)
             res.append(pairT)
             Lt += logL
         Tt = np.array(res)
@@ -140,7 +72,7 @@ class EM():
                 ststar, with diff bases reverted        
         """
         maxalts = []
-        for k in self.ds.VALID_INDICES:
+        for k in self.rd.VALID_INDICES:
             bw = wmat[k]
             # IF THE MAXIMUM IS NOT THE REFERENCE, SKIP
             if ststar[k] == self.consensus[k]:
@@ -172,7 +104,7 @@ class EM():
             W: a weight array in |X| x 4 
         """
         baseweights = np.zeros((len(self.consensus), 4))
-        for k in self.ds.VALID_INDICES:
+        for k in self.rd.VALID_INDICES:
             v = np.zeros(4)
             totalTk = 0
             for j,rl in enumerate(self.rd.V_INDEX[k]):
@@ -195,7 +127,7 @@ class EM():
         """
         baseweights = self.get_weight_base_array(T)
         ststar = [c for c in self.consensus]
-        for bi in self.ds.VALID_INDICES:
+        for bi in self.rd.VALID_INDICES:
             bw = baseweights[bi]
             maxi = max([j for j in range(4) if len(self.rd.V_INDEX[bi][j]) > self.min_cov], key=lambda x:bw[x])
             if sum(bw) > 0:
@@ -225,7 +157,7 @@ class EM():
         assert refs.size() > 0
         # Calculate scores that maximize Q
         refscores = np.zeros(refs.size())
-        conscores = [W[bi, self.consensus[bi]] for bi in self.ds.VALID_INDICES]
+        conscores = [W[bi, self.consensus[bi]] for bi in self.rd.VALID_INDICES]
         conscore = sum(conscores)
         # Calculate ref scores quickly by relying on differences to consensus
         # And updating that, instead of recomputing the whole thing
@@ -253,7 +185,7 @@ class EM():
         """ Initiallize st by chosing second most frequent base at each position. """
         st = [c for c in self.consensus]
         second_best = []
-        for vi in self.ds.VALID_INDICES:
+        for vi in self.rd.VALID_INDICES:
             vt = M[vi]
             stups = sorted([j for j in range(4)],key=lambda j:vt[j])
             sb = stups[-2]
@@ -272,13 +204,13 @@ class EM():
         # Big assertion
         assert len(st) == len(self.consensus), (len(st), len(self.consensus))
         for i in range(len(st)):
-            if i not in self.ds.VALID_INDICES:
+            if i not in self.rd.VALID_INDICES:
                 assert st[i] == self.consensus[i]
 
     def calc_L0(self):
         """ Calculate the likelihood under the null. """
-        g = self.recalc_gamma(np.array([[1,0] for j in range(len(self.ds.X))]))
-        return self.calc_log_likelihood(self.ds.get_consensus(),g,g,1)
+        g = self.recalc_gk(np.array([[1,0] for j in range(len(self.rd.X))]), self.consensus(), 0)
+        return self.llc.calc_data_log_likelihood(self.rd, self.consensus, g, g, 1, self.consensus, None)
 
     def estimate(self, ref_panel=None, n_its=None, random_init=False, debug=False,
              debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None,
@@ -297,13 +229,13 @@ class EM():
             one_gamma: set gamma1=gamma2
 
         Returns:
-            trace: list of values of [t, Lt, pit, g1t, g2t, st] for each
+            trace: list of values of [t, Lt, pit, g0t, g1t, st] for each
                    iteration.
         """
         # Abitrary initialization
         pit = 0.5
+        g0t = 0.01
         g1t = 0.01
-        g2t = 0.01
         
         # TODO: could move to a function
         # Initialization of st
@@ -332,13 +264,20 @@ class EM():
             if sum([q for q in m]) > 0:
                 assert sum(m) > 0.98, m
         assert len(self.rd.V_INDEX) == len(self.rd.M)
-        assert 0 <= gt <= 1,gt
+        assert 0 <= g0t <= 1, g0t
         assert ham(st, self.consensus) >= self.min_d, ham(st, self.consensus)
+
+        # Initialize the llc with st
+        # TODO: find a solution that allows llc to be updated
+        # with changed bases, but safely. Some form of
+        # safety check or validation
+        self.llc = LikelihoodCalculator(rd, st)
+
 
         trace = []
         t = 0
-        Lt = self.calc_log_likelihood(st, g1t, g2t, pit)
-        changed_inds = []
+        Lt = self.llc.calc_data_log_likelihood(self.rd, st, g0t, g1t, pit, self.consensus())
+        st_changed_bases = []
         old_st = st
         while True: 
 
@@ -350,26 +289,19 @@ class EM():
                 if t > n_its: 
                     break
 
-            trace.append([t, Lt, pit, g1t, g2t, st])
+            trace.append([t, Lt, pit, g0t, g1t, st])
 
             if ref_panel is None:
                 refht = "NA"
             # TODO: replace with logging
-            sys.stderr.write("Iteration:%d" % t + str([Lt, refht, pit, g1t, 
-                                g2t, ham_nogaps(st, self.consensus)]) + "\n")
+            sys.stderr.write("Iteration:%d" % t + str([Lt, refht, pit, g0t, 
+                                g1t, ham_nogaps(st, self.consensus)]) + "\n")
 
             Ltold = Lt
-            Tt, Lt = self.recalc_T(pit, g1t, st, g2t, old_st, changed_inds)
+            Tt, Lt = self.recalc_T(pit, g0t, st, g1t, old_st, st_changed_bases)
 
             if debug:
-                plotter.plot_genome(self.ds, Tt, st, debug_minor)
-
-            # Store variables
-            # TODO: why are these stored elsewhere too? duplication.
-            self.st = st
-            self.Tt = Tt
-            self.gt = gt
-            self.pit = pit
+                plotter.plot_genome(self.rd, Tt, st, debug_minor)
         
             # If probability has become 1; nothing should theoretically occur after this
             if sum(Tt[:, 1]) == 0:
@@ -380,13 +312,13 @@ class EM():
             pit = self.recalc_pi(Tt)
             pit = max(min_pi,min(max_pi,pit))
 
-            g1t = self.recalc_gamma(Tt, st, 0)
-            g1t = min(max(gt, 0.0001), 0.05)
+            g0t = self.recalc_gk(Tt, st, 0)
+            g0t = min(max(g0t, 0.0001), 0.05)
 
-            g2t = gt
+            g1t = g0t
             if not one_gamma:
-                g2t = self.recalc_gamma(Tt, st, 1)
-                g2t = min(max(g2t, 0.0001), 0.05)
+                g1t = self.recalc_gk(Tt, st, 1)
+                g1t = min(max(g1t, 0.0001), 0.05)
     
             # Recalculate string
             old_st = st
@@ -396,18 +328,18 @@ class EM():
                 st = self.recalc_st(Tt, self.min_d)     
             else:
                 st = fixed_st
-            changed_inds = [sti for sti in range(len(st)) if st[sti] != old_st[sti]]
+            st_changed_bases = [(sti, st[sti]) for sti in range(len(st)) if st[sti] != old_st[sti]]
 
             if np.abs(Ltold-Lt) < 0.001 and np.abs(old_pi-pit) < 0.001 and old_st == st:
                 break
 
             t += 1
 
-        trace.append([t, Lt, pit, g1t, g2t, st])
+        trace.append([t, Lt, pit, g0t, g1t, st])
         assert pit <= max_pi
-        sys.stderr.write("Iteration:%d" % t + str([Lt, pit, gt, mut, ham_nogaps(st, self.consensus)]) + "\n")
+        sys.stderr.write("Iteration:%d" % t + str([Lt, pit, g0t, g1t, ham_nogaps(st, self.consensus)]) + "\n")
 
         if debug:
-            plotter.plot_genome(self.ds, Tt, st, debug_minor)
+            plotter.plot_genome(self.rd, Tt, st, debug_minor)
 
         return trace
