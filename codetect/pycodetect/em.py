@@ -39,6 +39,7 @@ class EM():
             Lt: Likelihood at current iteration            
         """
 
+        for j, prevb in st_changed_bases: assert prev_st[j] == prevb
         res = []
         # Also calculate the log likelihood while we're at it
         Lt = 0
@@ -53,7 +54,7 @@ class EM():
         # TODO: replace cal_ham with a call to a cache
         """ Recalculate gamma for the kth cluster. """
         numo = sum([T[i,k] * Xi.count * Xi.cal_ham(S) for i, Xi in enumerate(self.rd.X)])
-        deno = sum([T[i,k] * Xi.count * len(Xi.get_aln()) for i, Xi in enumerate(self.rd.X)])
+        deno = sum([T[i,k] * Xi.count * len(Xi.get_aln_tuples()) for i, Xi in enumerate(self.rd.X)])
         assert deno > 0
         newg = numo/deno
         assert 0 <= newg <= 1, newg
@@ -257,7 +258,7 @@ class EM():
                 assert not np.isnan(v)
         assert len(self.rd.X) > 0
         for i, Xi in enumerate(self.rd.X):
-            for pos, bk in Xi.get_aln():
+            for pos, bk in Xi.get_aln_tuples():
                 assert i in self.rd.V_INDEX[pos][bk]
                 assert self.rd.M[pos, bk] > 0
         for m in self.rd.M:
@@ -271,12 +272,12 @@ class EM():
         # TODO: find a solution that allows llc to be updated
         # with changed bases, but safely. Some form of
         # safety check or validation
-        self.llc = LikelihoodCalculator(rd, st)
+        self.llc = LikelihoodCalculator(self.rd, st, g0t)
 
 
         trace = []
         t = 0
-        Lt = self.llc.calc_data_log_likelihood(self.rd, st, g0t, g1t, pit, self.consensus())
+        Lt = self.llc.calc_data_log_likelihood(self.rd, st, g0t, g1t, pit, self.consensus, [])
         st_changed_bases = []
         old_st = st
         while True: 
@@ -298,6 +299,7 @@ class EM():
                                 g1t, ham_nogaps(st, self.consensus)]) + "\n")
 
             Ltold = Lt
+            for bi, b in st_changed_bases: assert old_st[bi] == b
             Tt, Lt = self.recalc_T(pit, g0t, st, g1t, old_st, st_changed_bases)
 
             if debug:
@@ -328,7 +330,7 @@ class EM():
                 st = self.recalc_st(Tt, self.min_d)     
             else:
                 st = fixed_st
-            st_changed_bases = [(sti, st[sti]) for sti in range(len(st)) if st[sti] != old_st[sti]]
+            st_changed_bases = [(sti, old_st[sti]) for sti in range(len(st)) if st[sti] != old_st[sti]]
 
             if np.abs(Ltold-Lt) < 0.001 and np.abs(old_pi-pit) < 0.001 and old_st == st:
                 break
