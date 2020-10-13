@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # TODO: record headers as well
     if args.refs is not None:
         assert args.dmat is not None
-        refs = [(r.description,[c2i[only_ACGT(c)] for c in str(r.seq).upper()]) for r in SeqIO.parse(args.refs, "fasta")]
+        refs = [(r.description,[c2i(only_ACGT(c)) for c in str(r.seq).upper()]) for r in SeqIO.parse(args.refs, "fasta")]
         dmat = np.load(args.dmat)
         ds = DataSimulator(args.n_reads,args.read_length,args.gamma,args.pi,args.covq,paired_end=args.paired_end,template_sequences=refs, dmat=dmat, min_d=args.min_d, max_d=args.max_d, mu=args.mu) 
     else:
@@ -49,6 +49,8 @@ if __name__ == "__main__":
     else:
         sp.call("minimap2 -ax sr {ref} {fwd} | samtools view -b | samtools sort > {bam}".format(ref=ofilepref + ".major.fa",fwd=ofilepref+".fq",bam=ofilepref+".bam"), shell=True)
     sp.call("samtools index %s" % (ofilepref+".bam"), shell=True)
+    true_gamma = ds.true_pi
+    true_pi = ds.true_gamma
     sp.call("echo '{paramstr}' > {outcsv}".format(paramstr=" ".join(sys.argv),outcsv=ofilepref+".csv"),shell=True)
     pickleof= open(ofilepref+".pckl",'wb')
     pickle.dump(ds,pickleof)
