@@ -7,7 +7,7 @@ class ReadAln():
         name: identifier for a given read.
 
     """
-    def __init__(self,name):
+    def __init__(self, name):
         self.name = str(name)
         self.pos = None
         self.map = {}
@@ -30,7 +30,7 @@ class ReadAln():
     def cal_ham(self, S): 
         """ Calculate the hamming distance to S. """
         h = 0
-        for p, b in self.get_aln():
+        for p, b in self.get_aln_tuples():
             if b != S[p]:
                 h += 1
         return h
@@ -94,5 +94,6 @@ class ReadAln():
             pos: position in reference.
             c: base that maps at position pos (encoded as {0,1,2,3}).
         """
+        assert c != 4, "mapped bases should only be ACGT (0123)"
         if c is not None:
             self.map[pos] = c
