@@ -74,6 +74,8 @@ class DataSimulator(ReadAlnData):
             self._covwalk = np.ones(self.genome_length-self.read_length+1)
             self._covwalk /= sum(self._covwalk)
         assert len(self.major) == len(self.minor)
+        self.true_pi = None
+        self.true_gamma = None
         self.X = self.sample_reads(paired_end)
         # Parse data into a ReadData object
         super(DataSimulator,self).__init__(self.X,self.major)
@@ -245,11 +247,12 @@ class DataSimulator(ReadAlnData):
         for si in sampinds:
             roll = random.uniform(0,1)
             c = seq[si]
-            if roll < self.gamma:
-                alt = random.choice([z for z in range(4) if z != c])
-                aln.append_mapped_base(si,alt)
-            else:
-                aln.append_mapped_base(si,c)                    
+            if c in [0,1,2,3]:
+                if roll < self.gamma:
+                    alt = random.choice([z for z in range(4) if z != c])
+                    aln.append_mapped_base(si,alt)
+                else:
+                    aln.append_mapped_base(si,c)                    
         return aln
 
     def sample_reads(self, paired_end):
@@ -266,8 +269,10 @@ class DataSimulator(ReadAlnData):
         # Generate random coverage
 #        for i in range(self.n_reads):
         i = 0
+        true_count = 0
         while i < self.n_reads:
             seqi = np.random.choice([0,1],p=w)
+            true_count += seqi
             popseqs, popfreqs = pops[seqi]
             subseqi = np.random.choice(range(len(popseqs)), p=popfreqs)
             seq = popseqs[subseqi]
@@ -279,6 +284,7 @@ class DataSimulator(ReadAlnData):
             if 4 not in aln.get_ints():
                 X.append(aln)
                 i += 1
+        self.true_pi = true_count/len(X)
         return X
 
 def write_reads(ds, opref):
