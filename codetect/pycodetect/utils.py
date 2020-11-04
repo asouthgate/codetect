@@ -24,13 +24,20 @@ def ham_nogaps(s1,s2):
 def ham_nogaps_str(s1,s2):
     return sum([1 for i in range(len(s1)) if s1[i] != s2[i] and "N" not in [s1[i],s2[i]]])
 
-c2i = {"A":0, "C":1, "G":2, "T":3, "-":4, "M":4, "R":4, "Y":4, "S":4, "K":4, "W":4, "V":4, "H":4, "N":4, "X":4}
+def c2i(c):
+    if c == "A": return 0
+    elif c == "C": return 1
+    elif c == "G": return 2
+    elif c == "T": return 3
+    else: return 4
+
+i2c = lambda x: "ACGT"[x]
 
 def str_c2i(s):
-    return tuple([c2i[c] for c in s])
+    return tuple([c2i(c) for c in s])
 
 def str_i2c(s):
-    return "".join(["ACGT"[c] for c in s])
+    return "".join(["ACGT"(c) for c in s])
 
 def rev_comp(s):
     s2 = ""

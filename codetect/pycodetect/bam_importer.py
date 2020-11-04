@@ -10,7 +10,7 @@ def collect_alns(fname):
         pairs = [p for p in aln.get_aligned_pairs() if None not in p]
         refpositions = [p[1] for p in pairs]
         qseq = aln.query_sequence
-        seqbases = [c2i[qseq[p[0]]] for p in pairs]
+        seqbases = [c2i(qseq[p[0]]) for p in pairs]
         if not aln.query_name in alns:
             ra = ReadAln(aln.query_name)
             alns[aln.query_name] = ra
