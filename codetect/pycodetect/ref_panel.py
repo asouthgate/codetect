@@ -9,7 +9,7 @@ class RefPanel():
         assert type(cons[0]) == np.int64, type(cons[0])
         assert 4 not in cons
         self._s0_h = s0_h
-        self._s0_s, self._ref_panel = self.preprocess_msa_refs(ref_msa, s0_h, min_d=min_d)
+        self._s0_s, self._ref_panel = self.preprocess_msa_refs(ref_msa, s0_h, cons, min_d=min_d)
         self._ref_diff_inds = []
         self._min_d = min_d
         # Consensus should never have a 4 in it; convert any 4s to cons seq
@@ -78,7 +78,7 @@ class RefPanel():
                 assert ci not in rds
         return resdiffs
 
-    def preprocess_msa_refs(self, ref_fname, s0_h, min_d=None):
+    def preprocess_msa_refs(self, ref_fname, s0_h, cons, min_d=None):
         """ Preprocess MSA references by cutting out any
             insertions relative to s0.
 
@@ -121,7 +121,7 @@ class RefPanel():
                     s2 += s0_msa_seq[i]
             assert len(s2) == len(s0_seq)
             # If this is the required distance from s0, append
-            d = ham_nogaps_str(s0_seq, s2) 
+            d = ham_nogaps_str(cons, s2) 
             dmsa = ham_nogaps_str(s0_msa_seq, s)
             assert d == dmsa, (d, dmsa) 
             if min_d is not None:
