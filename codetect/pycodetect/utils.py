@@ -37,7 +37,7 @@ def str_c2i(s):
     return tuple([c2i(c) for c in s])
 
 def str_i2c(s):
-    return "".join(["ACGT"(c) for c in s])
+    return "".join(["ACGT"[c] for c in s])
 
 def rev_comp(s):
     s2 = ""
@@ -67,6 +67,15 @@ def only_ACGT(c):
     if c in "ACGT":
         return c
     return "N"
+
+def only_ACGTgap(c):
+    if c in "ACGT-":
+        return c
+    return "N"
+
+def str_only_ACGTgap(s):
+    return "".join([only_ACGTgap(c) for c in s])
+
 
 def str_only_ACGT(s):
     return "".join([only_ACGT(c) for c in s])

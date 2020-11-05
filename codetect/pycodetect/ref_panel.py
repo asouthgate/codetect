@@ -1,4 +1,4 @@
-from pycodetect.utils import str_c2i, ham_nogaps_str, str_only_ACGT
+from pycodetect.utils import str_c2i, ham_nogaps_str, str_only_ACGT, ham_nogaps, str_only_ACGTgap
 from Bio.SeqIO import FastaIO 
 import numpy as np
 import random
@@ -12,6 +12,11 @@ class RefPanel():
         self._s0_s, self._ref_panel = self.preprocess_msa_refs(ref_msa, s0_h, cons, min_d=min_d)
         self._ref_diff_inds = []
         self._min_d = min_d
+
+        # All references should be length of consensus.
+        for s, ref in self._ref_panel: 
+            assert(len(ref) == len(cons))
+
         # Consensus should never have a 4 in it; convert any 4s to cons seq
         for ri in range(len(self._ref_panel)):
             h,s = self._ref_panel[ri]
@@ -92,7 +97,7 @@ class RefPanel():
         """
         # Parse refs
         with open(ref_fname) as f:
-            recs = [(h,str_only_ACGT(s.upper())) for h,s in FastaIO.SimpleFastaParser(f)]
+            recs = [(h,str_only_ACGTgap(s.upper())) for h,s in FastaIO.SimpleFastaParser(f)]
 
         # Pull out s0 msa sequence
         s0_msa_seq = ""
@@ -104,6 +109,8 @@ class RefPanel():
         # Cut out any gaps from s0 to get s0_seq
         s0_seq = s0_msa_seq.replace("-","")
         assert len(s0_msa_seq) > 0, "Reference %s not found in msa" % s0_h
+
+        assert len(s0_seq) == len(cons), (len(s0_seq), len(cons))
 
         # Pull out indices that are not gaps in s0
         nongapinds = [j for j,c in enumerate(s0_msa_seq) if c != "-"]
@@ -120,21 +127,24 @@ class RefPanel():
                 else: 
                     s2 += s0_msa_seq[i]
             assert len(s2) == len(s0_seq)
-            # If this is the required distance from s0, append
-            d = ham_nogaps_str(cons, s2) 
-            dmsa = ham_nogaps_str(s0_msa_seq, s)
-            assert d == dmsa, (d, dmsa) 
-            if min_d is not None:
-                if d > min_d:
-                    recs2.append((h, str_c2i(s2)))
-            else:
-                recs2.append((h, str_c2i(s2)))
+            recs2.append((h, str_c2i(s2)))
 
         # Check, for all indicecs that are "N", s0 is also "N"
         for h, s in recs2:
             for ci, c in enumerate(s):
                 if c == 4: assert s0_seq[ci] == "N"
-        return s0_seq, recs2
+
+        # If this is the required distance from cons
+        recs2_final = []
+        if min_d is not None:
+            for h, s in recs2:
+                d = ham_nogaps(cons, s) 
+                if d >= min_d:
+                    recs2_final.append((h, s))
+        else:
+            recs2_final = recs2
+
+        return s0_seq, recs2_final
 
 
 
