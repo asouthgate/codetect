@@ -339,9 +339,9 @@ class EM():
 
         trace.append([t, Lt, pit, g0t, g1t, st])
         assert pit <= max_pi
-        sys.stderr.write("Iteration:%d" % t + str([Lt, pit, g0t, g1t, ham_nogaps(st, self.consensus)]) + "\n")
+        sys.stderr.write("Iteration:%d" % t + str([Lt, refht, pit, g0t, g1t, ham_nogaps(st, self.consensus)]) + "\n")
 
         if debug:
             plotter.plot_genome(self.rd, Tt, st, debug_minor)
 
-        return trace
+        return trace, refht
