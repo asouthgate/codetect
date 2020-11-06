@@ -23,6 +23,8 @@ class ReadAlnData():
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
 
+        X = self.subsample_stratified(X, 5000)
+
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
         sys.stderr.write("Rebuilding V index\n")

@@ -33,7 +33,7 @@ if __name__ == "__main__":
     parser.add_argument("--filter", type=str, required=False, default="winestimatew")
     args = parser.parse_args()
     alns = collect_alns(args.bam)
-    alns = np.random.choice(alns, min(5000, len(alns)), replace=False)
+#    alns = np.random.choice(alns, min(5000, len(alns)), replace=False)
     ref_rec = [r for r in SeqIO.parse(args.ref, "fasta")][0]
     ref = str_c2i(str(ref_rec.seq))
     rad = ReadAlnData(alns, ref)
