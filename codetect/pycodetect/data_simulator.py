@@ -44,7 +44,7 @@ class DataSimulator(ReadAlnData):
         else:
             sys.stderr.write("Picking a reference\n")
             self.major, self.minor, self.major_h, self.minor_h = self.pick_references(template_sequences, dmat, min_d, max_d)
-            assert len(self.major) == len(self.minor), (len(self.major), len(self.minor))
+#            assert len(self.major) == len(self.minor), (len(self.major), len(self.minor))
             sys.stderr.write("References chosen with distance: %f\n" % ham(self.major, self.minor))
             sys.stderr.write("References chosen of length: %d,%d\n" % (len(self.major), len(self.minor)))
             self.genome_length = len(self.major)
@@ -190,8 +190,8 @@ class DataSimulator(ReadAlnData):
             D: minimum distance between them.
         """
         mj = None
-        for h,s in refs:
-            assert len(s) == len(refs[0][1]), "Refs of unequal length: %s, %d" % (h,len(s))
+#        for h,s in refs:
+#            assert len(s) == len(refs[0][1]), "Refs of unequal length: %s, %d" % (h,len(s))
         while (mj == None) or (mj == mi):
             mi = random.randint(0,len(refs)-1)
             row = dmat[mi]

@@ -7,7 +7,7 @@ if __name__ == "__main__":
     import sys
     sys.path.append("./")
     from pycodetect.data_simulator import DataSimulator, write_reads, write_refs
-    from pycodetect.utils import c2i, only_ACGT
+    from pycodetect.utils import c2i, only_ACGT, only_ACGTgap
     import numpy as np
     import subprocess as sp
     import pickle
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # TODO: record headers as well
     if args.refs is not None:
         assert args.dmat is not None
-        refs = [(r.description,[c2i(only_ACGT(c)) for c in str(r.seq).upper()]) for r in SeqIO.parse(args.refs, "fasta")]
+        refs = [(r.description,[c2i(only_ACGT(c)) for c in str(r.seq).upper().replace("-","")]) for r in SeqIO.parse(args.refs, "fasta")]
         dmat = np.load(args.dmat)
         ds = DataSimulator(args.n_reads,args.read_length,args.gamma,args.pi,args.covq,paired_end=args.paired_end,template_sequences=refs, dmat=dmat, min_d=args.min_d, max_d=args.max_d, mu=args.mu) 
     else:

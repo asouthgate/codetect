@@ -300,6 +300,7 @@ class EM():
 
             Ltold = Lt
             for bi, b in st_changed_bases: assert old_st[bi] == b
+            sys.stderr.write("recalcing T:\n")
             Tt, Lt = self.recalc_T(pit, g0t, st, g1t, old_st, st_changed_bases)
 
             if debug:
@@ -307,6 +308,7 @@ class EM():
         
             # If probability has become 1; nothing should theoretically occur after this
             if sum(Tt[:, 1]) == 0:
+                sys.stderr.write("Breaking\n")
                 break
 
             # Recalculate scalars
@@ -336,6 +338,15 @@ class EM():
                 break
 
             t += 1
+
+        # TODO: move this duplication!
+        g0t = self.recalc_gk(Tt, self.rd.get_consensus(), 0)
+        g0t = min(max(g0t, 0.0001), 0.05)
+
+        g1t = g0t
+        if not one_gamma:
+            g1t = self.recalc_gk(Tt, st, 1)
+            g1t = min(max(g1t, 0.0001), 0.05)
 
         Tt, Lt = self.recalc_T(pit, g0t, st, g1t, old_st, st_changed_bases)
         trace.append([t, Lt, pit, g0t, g1t, st])

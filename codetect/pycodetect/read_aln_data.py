@@ -88,10 +88,13 @@ class ReadAlnData():
         for i, Xi in enumerate(X):
             pos_start_arr[Xi.pos].append(i)
         subsample = []
-        while len(subsample) < N_SAMPLES:
+        reads_remaining = 1
+        while len(subsample) < N_SAMPLES and reads_remaining > 0:
+            reads_remaining = 0
             for k in range(len(pos_start_arr)):
                 l = pos_start_arr[k]
                 if len(l) > 0:
+                    reads_remaining += 1
                     choiceli = random.randint(0,len(l)-1)
                     choicexi = l[choiceli]
                     del l[choiceli]

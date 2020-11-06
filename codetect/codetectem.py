@@ -33,7 +33,6 @@ if __name__ == "__main__":
     parser.add_argument("--filter", type=str, required=False, default="winestimatew")
     args = parser.parse_args()
     alns = collect_alns(args.bam)
-#    alns = np.random.choice(alns, min(5000, len(alns)), replace=False)
     ref_rec = [r for r in SeqIO.parse(args.ref, "fasta")][0]
     ref = str_c2i(str(ref_rec.seq))
     rad = ReadAlnData(alns, ref)
@@ -54,6 +53,7 @@ if __name__ == "__main__":
         if args.ref_msa is None:
             trace, refh = em.estimate()
         else:
+            sys.stderr.write("Running with ref panel\n")
             rp = RefPanel(em.consensus, args.ref_msa, ref_rec.description, min_d=args.mind)
             trace, refh = em.estimate(ref_panel=rp)
     else:
@@ -62,14 +62,11 @@ if __name__ == "__main__":
             sys.stderr.write("Running without ref panel\n")
             trace, refh = em.estimate(debug_minor=dbm,debug=True)
         else:
-            sys.stderr.write("running with ref panel\n")
+            sys.stderr.write("Running with ref panel\n")
             rp = RefPanel(em.consensus, args.ref_msa, ref_rec.description, min_d=args.mind)
             trace, refh = em.estimate(ref_panel=rp,debug_minor=dbm,debug=True)
 
-#    L0 = em.calc_L0()
-    sys.stderr.write("Calculating H0\n")
-#    L0 = em.calc_L0()
-#    sys.stderr.write("L0: %f\n" % L0)
+    sys.stderr.write("Calculating L0\n")
     alt_trace, refhnull = em.estimate(pit_init=1.0, min_pi=1.0,fixed_st= trace[-1][-1])
     nsites = len(em.rd.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:
