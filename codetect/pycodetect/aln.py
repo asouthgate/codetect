@@ -9,7 +9,7 @@ class ReadAln():
     """
     def __init__(self, name):
         self.name = str(name)
-        self.pos = None
+        self.pos = 9999999
         self.map = {}
         self.unmasked_map = {}
         self.string = ""
@@ -97,3 +97,5 @@ class ReadAln():
         assert c != 4, "mapped bases should only be ACGT (0123)"
         if c is not None:
             self.map[pos] = c
+            
+        if pos < self.pos: self.pos = pos

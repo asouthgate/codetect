@@ -247,7 +247,7 @@ class EM():
                 if ref_panel is None:
                     st = self.init_st(self.rd.M)
                 else:
-                    curr_ri, refht, st = ref_panel.get_random_ref()
+                    curr_ri, refht, st = ref_panel.get_ref_maximizing_second(self.rd.M)
         else:
             st = fixed_st
 

@@ -23,7 +23,7 @@ class ReadAlnData():
         sys.stderr.write("Building V index\n")
         self.V_INDEX = self.build_Vindex()
 
-        X = self.subsample_stratified(X, 5000)
+        self.X = self.subsample_stratified(X, 5000)
 
         sys.stderr.write("%d reads survived\n" % len(self.X))
         # Rebuild V index
@@ -84,7 +84,7 @@ class ReadAlnData():
             X: list of ReadAln objects.
         """
         #TODO: check math for legitimacy
-        pos_start_arr = [[] for i in range(len(self.get_consensus()))]
+        pos_start_arr = [[] for i in range(len(self.V_INDEX))]
         for i, Xi in enumerate(X):
             pos_start_arr[Xi.pos].append(i)
         subsample = []
@@ -96,6 +96,8 @@ class ReadAlnData():
                     choicexi = l[choiceli]
                     del l[choiceli]
                     subsample.append(X[choicexi])
+                if len(subsample) >= N_SAMPLES: 
+                    break
         return subsample        
 
     def deduplicate(self, X):

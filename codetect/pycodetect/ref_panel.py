@@ -36,6 +36,17 @@ class RefPanel():
         rh, rseq = self._ref_panel[ri]
         return ri, rh, rseq
 
+    def get_ref_maximizing_second(self, M):
+        secondbest = []
+        for pos, v in enumerate(M):
+            sortind = np.argsort(v)
+            second = sortind[2]
+            secondbest.append(second)
+        hams = [ham_nogaps(secondbest, s) for h, s in self._ref_panel]
+        chosen_ri = np.argmin(hams)
+        chosen = self._ref_panel[chosen_ri]
+        return chosen_ri, chosen[0], chosen[1]
+
     def cal_diff_inds(self, cons):
         """ Calculate an index for each record that gives the
             bases that are different to the consensus.
