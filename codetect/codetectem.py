@@ -70,7 +70,7 @@ if __name__ == "__main__":
     sys.stderr.write("Calculating H0\n")
 #    L0 = em.calc_L0()
 #    sys.stderr.write("L0: %f\n" % L0)
-    alt_trace, refhnull = em.estimate(min_pi=1.0,fixed_st=trace[-1][-1])
+    alt_trace, refhnull = em.estimate(pit_init=1.0, min_pi=1.0,fixed_st= trace[-1][-1])
     nsites = len(em.rd.VALID_INDICES)
     with open(args.out+".summary.csv", "w") as f:
         f.write("nsites\n%d" % (nsites))

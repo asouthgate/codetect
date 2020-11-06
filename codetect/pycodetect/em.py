@@ -215,7 +215,7 @@ class EM():
 
     def estimate(self, ref_panel=None, n_its=None, random_init=False, debug=False,
              debug_minor=None, max_pi=1.0, min_pi=0.5, fixed_st=None,
-             one_gamma=True):
+             one_gamma=True, pit_init=0.5):
         """ Estimate parameters by expectation-maximization.
 
         Optional args:
@@ -234,7 +234,7 @@ class EM():
                    iteration.
         """
         # Abitrary initialization
-        pit = 0.5
+        pit = pit_init
         g0t = 0.01
         g1t = 0.01
         
@@ -314,7 +314,7 @@ class EM():
             pit = self.recalc_pi(Tt)
             pit = max(min_pi,min(max_pi,pit))
 
-            g0t = self.recalc_gk(Tt, st, 0)
+            g0t = self.recalc_gk(Tt, self.rd.get_consensus(), 0)
             g0t = min(max(g0t, 0.0001), 0.05)
 
             g1t = g0t
@@ -337,6 +337,7 @@ class EM():
 
             t += 1
 
+        Tt, Lt = self.recalc_T(pit, g0t, st, g1t, old_st, st_changed_bases)
         trace.append([t, Lt, pit, g0t, g1t, st])
         assert pit <= max_pi
         sys.stderr.write("Iteration:%d" % t + str([Lt, refht, pit, g0t, g1t, ham_nogaps(st, self.consensus)]) + "\n")
