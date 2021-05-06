@@ -1,0 +1,3 @@
+Virus mixture detection using expectation maximization
+
+usage: codetect.py [-h] -bam file.bam -fa file2.fa -mind 5
